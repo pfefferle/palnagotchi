@@ -1,8 +1,9 @@
 #include "pwngrid.h"
+#include "config.h"
 
 uint8_t pwngrid_friends_tot = 0;
 uint8_t pwngrid_friends_run = 0;
-pwngrid_peer pwngrid_peers[255];
+pwngrid_peer pwngrid_peers[PWNGRID_MAX_PEERS];
 String pwngrid_last_friend_name = "";
 
 uint8_t getPwngridRunTotalPeers() { return pwngrid_friends_run; }
@@ -40,13 +41,11 @@ esp_err_t pwngridAdvertise(uint8_t channel, char session_id[18], String face) {
   String pal_json_str = "";
 
   pal_json["pal"] = true;  // Also detect other Palnagotchis
-  pal_json["name"] = "Palnagotchi";
+  pal_json["name"] = PALNAGOTCHI_NAME;
   pal_json["face"] = face;
   pal_json["epoch"] = 1;
   pal_json["grid_version"] = "1.10.3";
-  // TODO: generate valid pubkey for identity
-  pal_json["identity"] =
-      "32e9f315e92d974342c93d0fd952a914bfb4e6838953536ea6f63d54db6b9610";
+  pal_json["identity"] = PALNAGOTCHI_IDENTITY;
   pal_json["pwnd_run"] = 0;
   pal_json["pwnd_tot"] = 0;
   pal_json["session_id"] = session_id;
@@ -106,6 +105,10 @@ void pwngridAddPeer(JsonDocument &json, signed int rssi) {
     }
   }
 
+  if (pwngrid_friends_run >= PWNGRID_MAX_PEERS) {
+    return;
+  }
+
   pwngrid_peers[pwngrid_friends_run].rssi = rssi;
   pwngrid_peers[pwngrid_friends_run].last_ping = millis();
   pwngrid_peers[pwngrid_friends_run].gone = false;
@@ -131,14 +134,11 @@ void pwngridAddPeer(JsonDocument &json, signed int rssi) {
   EEPROM.commit();
 }
 
-const int away_threshold = 120000;
-
 void checkPwngridGoneFriends() {
   for (uint8_t i = 0; i < pwngrid_friends_run; i++) {
-    int away_secs = pwngrid_peers[i].last_ping - millis();
-    if (away_secs > away_threshold) {
+    uint32_t away_ms = millis() - pwngrid_peers[i].last_ping;
+    if (away_ms > PEER_AWAY_THRESHOLD_MS) {
       pwngrid_peers[i].gone = true;
-      return;
     }
   }
 }
@@ -155,30 +155,15 @@ signed int getPwngridClosestRssi() {
   return closest;
 }
 
+void getMAC(char *addr, uint8_t *data, uint16_t offset) {
+  snprintf(addr, 18, "%02x:%02x:%02x:%02x:%02x:%02x", data[offset + 0],
+           data[offset + 1], data[offset + 2], data[offset + 3],
+           data[offset + 4], data[offset + 5]);
+}
+
 // Detect pwnagotchi adapted from Marauder
 // https://github.com/justcallmekoko/ESP32Marauder/wiki/detect-pwnagotchi
 // https://github.com/justcallmekoko/ESP32Marauder/blob/master/esp32_marauder/WiFiScan.cpp#L2255
-typedef struct {
-  int16_t fctl;
-  int16_t duration;
-  uint8_t da;
-  uint8_t sa;
-  uint8_t bssid;
-  int16_t seqctl;
-  unsigned char payload[];
-} __attribute__((packed)) WifiMgmtHdr;
-
-typedef struct {
-  uint8_t payload[0];
-  WifiMgmtHdr hdr;
-} wifi_ieee80211_packet_t;
-
-void getMAC(char *addr, uint8_t *data, uint16_t offset) {
-  sprintf(addr, "%02x:%02x:%02x:%02x:%02x:%02x", data[offset + 0],
-          data[offset + 1], data[offset + 2], data[offset + 3],
-          data[offset + 4], data[offset + 5]);
-}
-
 void pwnSnifferCallback(void *buf, wifi_promiscuous_pkt_type_t type) {
   wifi_promiscuous_pkt_t *snifferPacket = (wifi_promiscuous_pkt_t *)buf;
 

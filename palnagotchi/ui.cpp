@@ -207,29 +207,29 @@ void drawTopCanvas(uint8_t channel) {
   #if !defined(ARDUINO_M5STACK_DIAL)
     char mode_str[24];
     if (channel > 0) {
-      sprintf(mode_str, "CH %d", channel);
+      snprintf(mode_str, sizeof(mode_str), "CH %d", channel);
     } else {
       static uint8_t ble_anim = 0;
       const char ble_spin[] = "|/-\\";
-      sprintf(mode_str, "BLE [%c]", ble_spin[ble_anim++ % 4]);
+      snprintf(mode_str, sizeof(mode_str), "BLE [%c]", ble_spin[ble_anim++ % 4]);
     }
     canvas_top.drawString(mode_str, 0, 5);
   #endif
 
-  unsigned long ellapsed = millis() / 1000;
-  int8_t h = ellapsed / 3600;
-  int sr = ellapsed % 3600;
+  unsigned long elapsed = millis() / 1000;
+  int8_t h = elapsed / 3600;
+  int sr = elapsed % 3600;
   int8_t m = sr / 60;
   int8_t s = sr % 60;
   char right_str[50] = "";
 
   if (display_w > 128 && M5.Power.getBatteryVoltage() > 0) {
-    sprintf(right_str, "UPS %i%% UP %02d:%02d:%02d", (int)lastBatteryLevel, h, m,
+    snprintf(right_str, sizeof(right_str), "UPS %i%% UP %02d:%02d:%02d", (int)lastBatteryLevel, h, m,
           s);
     canvas_top.setTextDatum(top_right);
     canvas_top.drawString(right_str, display_w, 5);
   } else {
-    sprintf(right_str, "UP %02d:%02d:%02d", h, m, s);
+    snprintf(right_str, sizeof(right_str), "UP %02d:%02d:%02d", h, m, s);
 
     #ifdef ARDUINO_M5STACK_DIAL
       // Center text on M5Dial
@@ -276,10 +276,10 @@ void drawBottomCanvas(uint8_t friends_run, uint8_t friends_tot,
   String rssi_bars = getRssiBars(rssi);
   char stats[64];
   if (friends_run > 0) {
-    sprintf(stats, "FRND %d (%d) [%s] %s", friends_run, friends_tot,
+    snprintf(stats, sizeof(stats), "FRND %d (%d) [%s] %s", friends_run, friends_tot,
             last_friend_name.c_str(), rssi_bars.c_str());
   } else {
-    sprintf(stats, "FRND 0 (0)");
+    snprintf(stats, sizeof(stats), "FRND 0 (0)");
   }
 
   uint8_t x_pos = 0;
@@ -321,7 +321,7 @@ void drawMainMenu() {
 
   char display_str[50] = "";
   for (uint8_t i = 0; i < main_menu_len; i++) {
-    sprintf(display_str, "%s %s", (menu_current_opt == i) ? ">" : " ",
+    snprintf(display_str, sizeof(display_str), "%s %s", (menu_current_opt == i) ? ">" : " ",
             main_menu[i].name);
     int y = PADDING + (i * ROW_SIZE / 2);
     canvas_main.drawString(display_str, 0, y);
@@ -351,7 +351,7 @@ void drawNearbyMenu() {
 
   // WiFi peers
   for (uint8_t i = 0; i < wifi_len; i++) {
-    sprintf(display_str, "%s %s [%s]", (menu_current_opt == row) ? ">" : " ",
+    snprintf(display_str, sizeof(display_str), "%s %s [%s]", (menu_current_opt == row) ? ">" : " ",
             wifi_peers[i].name.c_str(), getRssiBars(wifi_peers[i].rssi).c_str());
     int y = PADDING + (row * ROW_SIZE / 2);
     canvas_main.drawString(display_str, 0, y);
@@ -361,7 +361,7 @@ void drawNearbyMenu() {
   // BLE peers
   for (uint8_t i = 0; i < ble_len; i++) {
     if (ble_peers[i].gone) continue;
-    sprintf(display_str, "%s %s BLE[%s]", (menu_current_opt == row) ? ">" : " ",
+    snprintf(display_str, sizeof(display_str), "%s %s BLE[%s]", (menu_current_opt == row) ? ">" : " ",
             ble_peers[i].name.c_str(), getRssiBars(ble_peers[i].rssi).c_str());
     int y = PADDING + (row * ROW_SIZE / 2);
     canvas_main.drawString(display_str, 0, y);
@@ -377,7 +377,7 @@ void drawSettingsMenu() {
 
   char display_str[50] = "";
   for (uint8_t i = 0; i < settings_menu_len; i++) {
-    sprintf(display_str, "%s %s", (menu_current_opt == i) ? ">" : " ",
+    snprintf(display_str, sizeof(display_str), "%s %s", (menu_current_opt == i) ? ">" : " ",
             settings_menu[i].name);
     int y = PADDING + (i * ROW_SIZE / 2);
     canvas_main.drawString(display_str, 0, y);

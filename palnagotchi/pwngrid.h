@@ -1,10 +1,13 @@
+#pragma once
+
 #include "Arduino.h"
 #include "ArduinoJson.h"
 #include "EEPROM.h"
 #include "M5Unified.h"
 #include "esp_wifi.h"
 #include "esp_wifi_types.h"
-// #include "freertos/FreeRTOS.h"
+
+#define PWNGRID_MAX_PEERS 32
 
 typedef struct {
   int epoch;
@@ -19,7 +22,7 @@ typedef struct {
   int uptime;
   String version;
   signed int rssi;
-  int last_ping;
+  uint32_t last_ping;
   bool gone;
 } pwngrid_peer;
 

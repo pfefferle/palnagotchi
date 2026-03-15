@@ -1,4 +1,5 @@
 #include "pwnbeacon.h"
+#include "config.h"
 #include <NimBLEDevice.h>
 #include <mbedtls/sha256.h>
 
@@ -56,8 +57,8 @@ int findPeerByFingerprint(const uint8_t *fp) {
 }
 
 void pwnbeaconAddPeer(const uint8_t *data, size_t len, int8_t rssi,
-                      const char *ble_name = nullptr) {
-  // Need at least version + flags + pwnd counts + 4 bytes of fingerprint
+                      const char *ble_name) {
+  // Need at least version + flags + pwnd counts + fingerprint
   if (len < 10) {
     return;
   }
@@ -118,12 +119,6 @@ void pwnbeaconAddPeer(const uint8_t *data, size_t len, int8_t rssi,
 
 class PwnBeaconScanCallbacks : public NimBLEScanCallbacks {
   void onResult(const NimBLEAdvertisedDevice *advertisedDevice) override {
-    // Check service UUID in advertisement
-    if (advertisedDevice->haveServiceUUID() &&
-        advertisedDevice->isAdvertisingService(NimBLEUUID(PWNBEACON_SERVICE_UUID))) {
-    }
-
-    // Check service data UUID
     int svcDataCount = advertisedDevice->getServiceDataCount();
     for (int i = 0; i < svcDataCount; i++) {
       if (advertisedDevice->getServiceDataUUID(i).equals(NimBLEUUID(PWNBEACON_SERVICE_UUID))) {
@@ -146,12 +141,11 @@ static PwnBeaconScanCallbacks scanCallbacks;
 void initPwnbeacon() {
   strncpy(pwnbeacon_name, "Palnagot", PWNBEACON_ADV_MAX_NAME_LEN);
   pwnbeacon_name[PWNBEACON_ADV_MAX_NAME_LEN] = '\0';
-  strncpy(pwnbeacon_identity,
-          "32e9f315e92d974342c93d0fd952a914bfb4e6838953536ea6f63d54db6b9610",
+  strncpy(pwnbeacon_identity, PALNAGOTCHI_IDENTITY,
           sizeof(pwnbeacon_identity) - 1);
   computeFingerprint(pwnbeacon_identity, pwnbeacon_fingerprint);
 
-  NimBLEDevice::init("Palnagotchi");
+  NimBLEDevice::init(PALNAGOTCHI_NAME);
 
   ble_advertising = NimBLEDevice::getAdvertising();
   ble_advertising->addServiceUUID(NimBLEUUID(PWNBEACON_SERVICE_UUID));
@@ -206,7 +200,6 @@ void pwnbeaconScan(uint16_t duration_ms) {
     return;
   }
 
-  // Keep advertising while scanning so other devices can see us
   NimBLEScan *scanner = NimBLEDevice::getScan();
   scanner->setScanCallbacks(&scanCallbacks, true);
   scanner->setActiveScan(true);
@@ -223,14 +216,11 @@ void pwnbeaconScan(uint16_t duration_ms) {
   }
 }
 
-const int ble_away_threshold = 120000;
-
 void checkPwnbeaconGonePeers() {
   for (uint8_t i = 0; i < pwnbeacon_friends_run; i++) {
-    int away_secs = pwnbeacon_peers[i].last_seen - millis();
-    if (away_secs > ble_away_threshold) {
+    uint32_t away_ms = millis() - pwnbeacon_peers[i].last_seen;
+    if (away_ms > PEER_AWAY_THRESHOLD_MS) {
       pwnbeacon_peers[i].gone = true;
-      return;
     }
   }
 }

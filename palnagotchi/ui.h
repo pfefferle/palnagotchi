@@ -1,3 +1,5 @@
+#pragma once
+
 #ifdef ARDUINO_M5STACK_CARDPUTER
   #include "M5Cardputer.h"
 #endif
