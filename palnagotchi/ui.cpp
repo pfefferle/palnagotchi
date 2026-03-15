@@ -140,30 +140,10 @@ void updateUi(bool show_toolbars, uint8_t channel) {
   String mood_face = getCurrentMoodFace();
   String mood_phrase = getCurrentMoodPhrase();
   bool mood_broken = isCurrentMoodBroken();
-  uint16_t total_peers = storageGetTotalPeers();
-
-  // Merge WiFi + BLE peer counts
-  uint8_t wifi_peers = getPwngridRunTotalPeers();
-  uint8_t ble_peers = getPwnbeaconRunTotalPeers();
-  uint8_t combined_run = wifi_peers + ble_peers;
-
-  // Pick last friend name and closest RSSI from whichever is more recent
-  String last_name = getPwngridLastFriendName();
-  signed int closest_rssi = getPwngridClosestRssi();
-  if (ble_peers > 0) {
-    if (last_name.length() == 0) {
-      last_name = getPwnbeaconLastFriendName();
-    }
-    int8_t ble_rssi = getPwnbeaconClosestRssi();
-    if (ble_rssi > closest_rssi) {
-      closest_rssi = ble_rssi;
-    }
-  }
-
   M5.Display.startWrite();
   drawTopCanvas(channel);
-  drawBottomCanvas(combined_run, total_peers + ble_peers,
-                   last_name, closest_rssi);
+  drawBottomCanvas(storageGetPeerCount(), storageGetTotalPeers(),
+                   storageGetLastFriendName(), storageGetClosestRssi());
 
   if (menu_open) {
     drawMenu();
@@ -333,13 +313,10 @@ void drawNearbyMenu() {
   canvas_main.setTextColor(GREEN);
   canvas_main.setTextDatum(top_left);
 
-  pwngrid_peer *wifi_peers = getPwngridPeers();
-  uint8_t wifi_len = getPwngridRunTotalPeers();
-  pwnbeacon_peer *ble_peers = getPwnbeaconPeers();
-  uint8_t ble_len = getPwnbeaconRunTotalPeers();
-  uint8_t total_len = wifi_len + ble_len;
+  storage_peer *all_peers = storageGetPeers();
+  uint8_t count = storageGetPeerCount();
 
-  if (total_len == 0) {
+  if (count == 0) {
     canvas_main.setTextColor(TFT_DARKGRAY);
     canvas_main.setCursor(0, PADDING);
     canvas_main.println("No nearby Pwnagotchis. Seriously?");
@@ -348,20 +325,12 @@ void drawNearbyMenu() {
   char display_str[50] = "";
   uint8_t row = 0;
 
-  // WiFi peers
-  for (uint8_t i = 0; i < wifi_len; i++) {
-    snprintf(display_str, sizeof(display_str), "%s %s [%s]", (menu_current_opt == row) ? ">" : " ",
-            wifi_peers[i].name.c_str(), getRssiBars(wifi_peers[i].rssi).c_str());
-    int y = PADDING + (row * ROW_SIZE / 2);
-    canvas_main.drawString(display_str, 0, y);
-    row++;
-  }
-
-  // BLE peers
-  for (uint8_t i = 0; i < ble_len; i++) {
-    if (ble_peers[i].gone) continue;
-    snprintf(display_str, sizeof(display_str), "%s %s BLE[%s]", (menu_current_opt == row) ? ">" : " ",
-            ble_peers[i].name.c_str(), getRssiBars(ble_peers[i].rssi).c_str());
+  for (uint8_t i = 0; i < count; i++) {
+    const char* type_tag = (all_peers[i].type == "ble") ? " BLE" : "";
+    snprintf(display_str, sizeof(display_str), "%s %s%s [%s]",
+            (menu_current_opt == row) ? ">" : " ",
+            all_peers[i].name.c_str(), type_tag,
+            getRssiBars(all_peers[i].rssi).c_str());
     int y = PADDING + (row * ROW_SIZE / 2);
     canvas_main.drawString(display_str, 0, y);
     row++;

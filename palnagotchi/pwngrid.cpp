@@ -2,14 +2,6 @@
 #include "config.h"
 #include "storage.h"
 
-uint8_t pwngrid_friends_run = 0;
-pwngrid_peer pwngrid_peers[PWNGRID_MAX_PEERS];
-String pwngrid_last_friend_name = "";
-
-uint8_t getPwngridRunTotalPeers() { return pwngrid_friends_run; }
-String getPwngridLastFriendName() { return pwngrid_last_friend_name; }
-pwngrid_peer *getPwngridPeers() { return pwngrid_peers; }
-
 // Had to remove Radiotap headers, since its automatically added
 // Also had to remove the last 4 bytes (frame check sequence)
 const uint8_t pwngrid_beacon_raw[] = {
@@ -94,65 +86,10 @@ esp_err_t pwngridAdvertise(uint8_t channel, char session_id[18], String face) {
 }
 
 void pwngridAddPeer(JsonDocument &json, signed int rssi) {
-  for (uint8_t i = 0; i < pwngrid_friends_run; i++) {
-    // Check if peer identity is already in peers array
-    if (pwngrid_peers[i].identity == json["identity"].as<String>() &&
-        pwngrid_peers[i].session_id == json["session_id"].as<String>()) {
-      pwngrid_peers[i].last_ping = millis();
-      pwngrid_peers[i].gone = false;
-      pwngrid_peers[i].rssi = rssi;
-      return;
-    }
-  }
-
-  if (pwngrid_friends_run >= PWNGRID_MAX_PEERS) {
-    return;
-  }
-
-  pwngrid_peers[pwngrid_friends_run].rssi = rssi;
-  pwngrid_peers[pwngrid_friends_run].last_ping = millis();
-  pwngrid_peers[pwngrid_friends_run].gone = false;
-  pwngrid_peers[pwngrid_friends_run].name = json["name"].as<String>();
-  pwngrid_peers[pwngrid_friends_run].face = json["face"].as<String>();
-  pwngrid_peers[pwngrid_friends_run].epoch = json["epoch"].as<int>();
-  pwngrid_peers[pwngrid_friends_run].grid_version =
-      json["grid_version"].as<String>();
-  pwngrid_peers[pwngrid_friends_run].identity = json["identity"].as<String>();
-  pwngrid_peers[pwngrid_friends_run].pwnd_run = json["pwnd_run"].as<int>();
-  pwngrid_peers[pwngrid_friends_run].pwnd_tot = json["pwnd_tot"].as<int>();
-  pwngrid_peers[pwngrid_friends_run].session_id =
-      json["session_id"].as<String>();
-  pwngrid_peers[pwngrid_friends_run].timestamp = json["timestamp"].as<int>();
-  pwngrid_peers[pwngrid_friends_run].uptime = json["uptime"].as<int>();
-  pwngrid_peers[pwngrid_friends_run].version = json["version"].as<String>();
-  pwngrid_last_friend_name = pwngrid_peers[pwngrid_friends_run].name;
-  pwngrid_friends_run++;
-
-  storageIncrementTotalPeers();
-  storageLogPeer(pwngrid_peers[pwngrid_friends_run - 1].name.c_str(),
-                 pwngrid_peers[pwngrid_friends_run - 1].face.c_str(),
-                 "", "WiFi");
-}
-
-void checkPwngridGoneFriends() {
-  for (uint8_t i = 0; i < pwngrid_friends_run; i++) {
-    uint32_t away_ms = millis() - pwngrid_peers[i].last_ping;
-    if (away_ms > PEER_AWAY_THRESHOLD_MS) {
-      pwngrid_peers[i].gone = true;
-    }
-  }
-}
-
-signed int getPwngridClosestRssi() {
-  signed int closest = -1000;
-
-  for (uint8_t i = 0; i < pwngrid_friends_run; i++) {
-    if (pwngrid_peers[i].gone == false && pwngrid_peers[i].rssi > closest) {
-      closest = pwngrid_peers[i].rssi;
-    }
-  }
-
-  return closest;
+  storageAddPeer(json["name"].as<String>().c_str(),
+                 json["face"].as<String>().c_str(),
+                 json["identity"].as<String>().c_str(),
+                 "wifi", rssi);
 }
 
 void getMAC(char *addr, uint8_t *data, uint16_t offset) {
@@ -253,7 +190,6 @@ bool pwngridTick(uint8_t &channel, char *session_id, String face) {
   // End phase after cycling through all channels (~22 seconds)
   if (millis() - wifi_phase_start > (uint32_t)DWELL_TIME_MS * MAX_CHANNEL) {
     stopPwngridSniffing();
-    checkPwngridGoneFriends();
     wifi_phase_start = 0;
     return true;
   }

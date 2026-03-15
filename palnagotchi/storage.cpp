@@ -2,9 +2,15 @@
 #include "EEPROM.h"
 #include <SD.h>
 #include <SPI.h>
+#include <ArduinoJson.h>
 
 static bool sd_available = false;
-static uint16_t total_peers = 0;
+static uint16_t total_peers_eeprom = 0;
+
+// Unified peer list
+static storage_peer peers[STORAGE_MAX_PEERS];
+static uint8_t peer_count = 0;
+static String last_friend_name = "";
 
 // Ring buffer for recent log entries
 static String log_ring[STORAGE_LOG_RING_SIZE];
@@ -40,20 +46,15 @@ static void writeToSd(const String& line) {
 }
 
 void initStorage() {
-  // EEPROM
   EEPROM.begin(256);
-  EEPROM.get(0, total_peers);
+  EEPROM.get(0, total_peers_eeprom);
 
-  // SD card auto-detection
   #if defined(ARDUINO_M5STACK_CARDPUTER)
-    // Cardputer + Cardputer Adv — built-in SD slot
     SPI.begin(40, 39, 14, 12);
     sd_available = SD.begin(12);
   #elif defined(ARDUINO_M5STACK_ATOM)
-    // Atomic TF Card Reader (ESP32-PICO)
     sd_available = SD.begin(33);
   #elif defined(ARDUINO_M5STACK_ATOMS3)
-    // Atomic TF Card Reader (ESP32-S3) — needs HW verification
     SPI.begin(17, 8, 21, 15);
     sd_available = SD.begin(15);
   #endif
@@ -69,15 +70,130 @@ bool isSdAvailable() {
   return sd_available;
 }
 
-uint16_t storageGetTotalPeers() {
-  return total_peers;
+// --- Unified peer access ---
+
+storage_peer* storageGetPeers() {
+  return peers;
 }
 
-void storageIncrementTotalPeers() {
-  total_peers++;
-  EEPROM.put(0, total_peers);
-  EEPROM.commit();
+uint8_t storageGetPeerCount() {
+  return peer_count;
 }
+
+uint16_t storageGetTotalPeers() {
+  if (sd_available) {
+    return peer_count;
+  }
+  return total_peers_eeprom;
+}
+
+String storageGetLastFriendName() {
+  return last_friend_name;
+}
+
+signed int storageGetClosestRssi() {
+  signed int closest = -1000;
+  for (uint8_t i = 0; i < peer_count; i++) {
+    if (!peers[i].gone && peers[i].rssi > closest) {
+      closest = peers[i].rssi;
+    }
+  }
+  return closest;
+}
+
+// --- Peer mutations ---
+
+static int findPeer(const char* identity, const char* type) {
+  for (uint8_t i = 0; i < peer_count; i++) {
+    if (peers[i].type == type && peers[i].identity == identity) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+void storageAddPeer(const char* name, const char* face,
+                    const char* identity, const char* type,
+                    signed int rssi) {
+  int idx = findPeer(identity, type);
+  if (idx >= 0) {
+    peers[idx].rssi = rssi;
+    peers[idx].gone = false;
+    return;
+  }
+
+  if (peer_count >= STORAGE_MAX_PEERS) return;
+
+  peers[peer_count].name     = name;
+  peers[peer_count].face     = face ? face : "";
+  peers[peer_count].identity = identity;
+  peers[peer_count].type     = type;
+  peers[peer_count].rssi     = rssi;
+  peers[peer_count].gone     = false;
+  last_friend_name = name;
+  peer_count++;
+
+  storageLogPeer(name, face, "", type);
+  storageSavePeers();
+}
+
+// --- Persistence ---
+
+void storageSavePeers() {
+  if (!sd_available) {
+    total_peers_eeprom++;
+    EEPROM.put(0, total_peers_eeprom);
+    EEPROM.commit();
+    return;
+  }
+
+  JsonDocument doc;
+  JsonArray arr = doc.to<JsonArray>();
+
+  for (uint8_t i = 0; i < peer_count; i++) {
+    JsonObject obj = arr.add<JsonObject>();
+    obj["name"]     = peers[i].name;
+    obj["face"]     = peers[i].face;
+    obj["identity"] = peers[i].identity;
+    obj["type"]     = peers[i].type;
+    obj["rssi"]     = peers[i].rssi;
+  }
+
+  SD.remove("/palnagotchi/peers.json");
+  File f = SD.open("/palnagotchi/peers.json", FILE_WRITE);
+  if (f) {
+    serializeJson(doc, f);
+    f.close();
+  }
+}
+
+void storageLoadPeers() {
+  if (!sd_available) return;
+  if (!SD.exists("/palnagotchi/peers.json")) return;
+
+  File f = SD.open("/palnagotchi/peers.json", FILE_READ);
+  if (!f) return;
+
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, f);
+  f.close();
+  if (err) return;
+
+  JsonArray arr = doc.as<JsonArray>();
+  for (JsonObject obj : arr) {
+    if (peer_count >= STORAGE_MAX_PEERS) break;
+
+    peers[peer_count].name     = obj["name"] | "";
+    peers[peer_count].face     = obj["face"] | "";
+    peers[peer_count].identity = obj["identity"] | "";
+    peers[peer_count].type     = obj["type"] | "";
+    peers[peer_count].rssi     = obj["rssi"] | -100;
+    peers[peer_count].gone     = true;
+    peer_count++;
+  }
+}
+
+// --- Chat log ---
 
 void storageLogPeer(const char* name, const char* face,
                     const char* phrase, const char* source) {
@@ -107,7 +223,6 @@ uint8_t storageGetLogCount() {
 String storageGetLogEntry(uint8_t index) {
   if (index >= log_count) return "";
 
-  // Ring buffer: oldest entry is at (head - count), newest at (head - 1)
   uint8_t pos = (log_head - log_count + index + STORAGE_LOG_RING_SIZE) % STORAGE_LOG_RING_SIZE;
   return log_ring[pos];
 }

@@ -13,6 +13,8 @@
 #endif
 
 #include "esp_system.h"
+#include "pwngrid.h"
+#include "pwnbeacon.h"
 #include "storage.h"
 #include "ui.h"
 
@@ -61,6 +63,7 @@ void setup() {
   initMood();
   initPwnbeacon();
   initPwngrid();
+  storageLoadPeers();
   initUi();
 }
 

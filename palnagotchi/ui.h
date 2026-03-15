@@ -13,8 +13,6 @@
 #endif
 
 #include "mood.h"
-#include "pwngrid.h"
-#include "pwnbeacon.h"
 #include "storage.h"
 
 void initUi();
