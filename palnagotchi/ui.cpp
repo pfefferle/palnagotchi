@@ -140,8 +140,7 @@ void updateUi(bool show_toolbars, uint8_t channel) {
   String mood_face = getCurrentMoodFace();
   String mood_phrase = getCurrentMoodPhrase();
   bool mood_broken = isCurrentMoodBroken();
-  uint8_t total_peers = 0;
-  EEPROM.get(0, total_peers);
+  uint16_t total_peers = storageGetTotalPeers();
 
   // Merge WiFi + BLE peer counts
   uint8_t wifi_peers = getPwngridRunTotalPeers();

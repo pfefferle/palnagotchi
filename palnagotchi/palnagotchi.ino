@@ -12,8 +12,8 @@
   #include "M5DinMeter.h"
 #endif
 
-#include "EEPROM.h"
 #include "esp_system.h"
+#include "storage.h"
 #include "ui.h"
 
 #define STATE_INIT 0
@@ -54,8 +54,8 @@ void setRandomSessionId() {
 }
 
 void setup() {
-  EEPROM.begin(256);
   Serial.begin(9600);
+  initStorage();
   setRandomSessionId();
   initM5();
   initMood();

@@ -1,7 +1,7 @@
 #include "pwngrid.h"
 #include "config.h"
+#include "storage.h"
 
-uint8_t pwngrid_friends_tot = 0;
 uint8_t pwngrid_friends_run = 0;
 pwngrid_peer pwngrid_peers[PWNGRID_MAX_PEERS];
 String pwngrid_last_friend_name = "";
@@ -128,10 +128,10 @@ void pwngridAddPeer(JsonDocument &json, signed int rssi) {
   pwngrid_last_friend_name = pwngrid_peers[pwngrid_friends_run].name;
   pwngrid_friends_run++;
 
-  // Read total peers from EEPROM and increment it
-  EEPROM.get(0, pwngrid_friends_tot);
-  EEPROM.put(0, pwngrid_friends_tot + 1);
-  EEPROM.commit();
+  storageIncrementTotalPeers();
+  storageLogPeer(pwngrid_peers[pwngrid_friends_run - 1].name.c_str(),
+                 pwngrid_peers[pwngrid_friends_run - 1].face.c_str(),
+                 "", "WiFi");
 }
 
 void checkPwngridGoneFriends() {

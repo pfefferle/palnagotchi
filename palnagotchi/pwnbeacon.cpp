@@ -1,5 +1,6 @@
 #include "pwnbeacon.h"
 #include "config.h"
+#include "storage.h"
 #include <ArduinoJson.h>
 #include <NimBLEDevice.h>
 #include <mbedtls/sha256.h>
@@ -143,6 +144,9 @@ void pwnbeaconAddPeer(const uint8_t *data, size_t len, int8_t rssi,
 
   pwnbeacon_last_friend_name = pwnbeacon_peers[pwnbeacon_friends_run].name;
   pwnbeacon_friends_run++;
+
+  storageLogPeer(pwnbeacon_peers[pwnbeacon_friends_run - 1].name.c_str(),
+                 "", "", "BLE");
 }
 
 // --- NimBLE Callbacks ---
@@ -182,7 +186,10 @@ class SignalCallbacks : public NimBLECharacteristicCallbacks {
 
 class MessageCallbacks : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic *characteristic, NimBLEConnInfo &connInfo) override {
-    // Message received — could be forwarded to UI
+    std::string raw = characteristic->getValue();
+    if (raw.length() > 0) {
+      storageLogMessage("BLE peer", raw.c_str());
+    }
   }
 };
 

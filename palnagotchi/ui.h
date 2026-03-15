@@ -12,10 +12,10 @@
   #include "M5DinMeter.h"
 #endif
 
-#include "EEPROM.h"
 #include "mood.h"
 #include "pwngrid.h"
 #include "pwnbeacon.h"
+#include "storage.h"
 
 void initUi();
 void wakeUp();
