@@ -30,6 +30,11 @@ const int raw_beacon_len = sizeof(pwngrid_beacon_raw);
 esp_err_t esp_wifi_80211_tx(wifi_interface_t ifx, const void *buffer, int len,
                             bool en_sys_seq);
 
+void pwnSnifferCallback(void *buf, wifi_promiscuous_pkt_type_t type);
+
+const wifi_promiscuous_filter_t filter = {
+    .filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA};
+
 esp_err_t pwngridAdvertise(uint8_t channel, char session_id[18], String face) {
   JsonDocument pal_json;
   String pal_json_str = "";
@@ -84,12 +89,6 @@ esp_err_t pwngridAdvertise(uint8_t channel, char session_id[18], String face) {
     pwngrid_beacon_frame[frame_byte++] = next_byte;
   }
 
-  // Channel switch not working?
-  // vTaskDelay(500 / portTICK_PERIOD_MS);
-  esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
-  delay(102);
-  // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/network/esp_wifi.html#_CPPv417esp_wifi_80211_tx16wifi_interface_tPKvib
-  // vTaskDelay(103 / portTICK_PERIOD_MS);
   esp_err_t result = esp_wifi_80211_tx(WIFI_IF_AP, pwngrid_beacon_frame,
                                        sizeof(pwngrid_beacon_frame), false);
   return result;
@@ -125,7 +124,7 @@ void pwngridAddPeer(JsonDocument &json, signed int rssi) {
   pwngrid_peers[pwngrid_friends_run].version = json["version"].as<String>();
   pwngrid_last_friend_name = pwngrid_peers[pwngrid_friends_run].name;
   pwngrid_friends_run++;
-  
+
   // Read total peers from EEPROM and increment it
   EEPROM.get(0, pwngrid_friends_tot);
   EEPROM.put(0, pwngrid_friends_tot + 1);
@@ -136,7 +135,6 @@ const int away_threshold = 120000;
 
 void checkPwngridGoneFriends() {
   for (uint8_t i = 0; i < pwngrid_friends_run; i++) {
-    // Check if peer is away for more then
     int away_secs = pwngrid_peers[i].last_ping - millis();
     if (away_secs > away_threshold) {
       pwngrid_peers[i].gone = true;
@@ -149,7 +147,6 @@ signed int getPwngridClosestRssi() {
   signed int closest = -1000;
 
   for (uint8_t i = 0; i < pwngrid_friends_run; i++) {
-    // Check if peer is away for more then
     if (pwngrid_peers[i].gone == false && pwngrid_peers[i].rssi > closest) {
       closest = pwngrid_peers[i].rssi;
     }
@@ -184,71 +181,97 @@ void getMAC(char *addr, uint8_t *data, uint16_t offset) {
 
 void pwnSnifferCallback(void *buf, wifi_promiscuous_pkt_type_t type) {
   wifi_promiscuous_pkt_t *snifferPacket = (wifi_promiscuous_pkt_t *)buf;
-  WifiMgmtHdr *frameControl = (WifiMgmtHdr *)snifferPacket->payload;
 
-  String src = "";
+  if (type != WIFI_PKT_MGMT) return;
+
+  // Only process beacon frames
+  if (snifferPacket->payload[0] != 0x80) return;
+
+  int len = snifferPacket->rx_ctrl.sig_len - 4;
+
+  char addr[] = "00:00:00:00:00:00";
+  getMAC(addr, snifferPacket->payload, 10);
+
+  String src(addr);
+  if (src != "de:ad:be:ef:de:ad") return;
+
+  // Extract JSON from vendor-specific IEs
   String essid = "";
-
-  if (type == WIFI_PKT_MGMT) {
-    // Remove frame check sequence bytes
-    int len = snifferPacket->rx_ctrl.sig_len - 4;
-    int fctl = ntohs(frameControl->fctl);
-    const wifi_ieee80211_packet_t *ipkt =
-        (wifi_ieee80211_packet_t *)snifferPacket->payload;
-    const WifiMgmtHdr *hdr = &ipkt->hdr;
-
-    // if ((snifferPacket->payload[0] == 0x80) && (buf == 0)) {
-    if ((snifferPacket->payload[0] == 0x80)) {
-      char addr[] = "00:00:00:00:00:00";
-      getMAC(addr, snifferPacket->payload, 10);
-      src.concat(addr);
-      if (src == "de:ad:be:ef:de:ad") {
-        // Just grab the first 255 bytes of the pwnagotchi beacon
-        // because that is where the name is
-        for (int i = 38; i < len; i++) {
-          if (isAscii(snifferPacket->payload[i])) {
-            essid.concat((char)snifferPacket->payload[i]);
-          }
-        }
-
-        JsonDocument sniffed_json;
-        DeserializationError result = deserializeJson(sniffed_json, essid);
-
-        if (result == DeserializationError::Ok) {
-          pwngridAddPeer(sniffed_json, snifferPacket->rx_ctrl.rssi);
-        } else if (result == DeserializationError::IncompleteInput) {
-          Serial.println("Deserialization error: incomplete input");
-        } else if (result == DeserializationError::NoMemory) {
-          Serial.println("Deserialization error: no memory");
-        } else if (result == DeserializationError::InvalidInput) {
-          Serial.println("Deserialization error: invalid input");
-        } else if (result == DeserializationError::TooDeep) {
-          Serial.println("Deserialization error: too deep");
-        } else {
-          Serial.println(essid);
-          Serial.println("Deserialization error");
-        }
-      }
+  for (int i = 38; i < len; i++) {
+    if (isAscii(snifferPacket->payload[i])) {
+      essid.concat((char)snifferPacket->payload[i]);
     }
+  }
+
+  JsonDocument sniffed_json;
+  DeserializationError result = deserializeJson(sniffed_json, essid);
+
+  if (result == DeserializationError::Ok) {
+    pwngridAddPeer(sniffed_json, snifferPacket->rx_ctrl.rssi);
   }
 }
 
-const wifi_promiscuous_filter_t filter = {
-    .filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA};
-
 void initPwngrid() {
-  // Disable WiFi logging
   esp_log_level_set("wifi", ESP_LOG_NONE);
 
   wifi_init_config_t WIFI_INIT_CONFIG = WIFI_INIT_CONFIG_DEFAULT();
   esp_wifi_init(&WIFI_INIT_CONFIG);
   esp_wifi_set_storage(WIFI_STORAGE_RAM);
   esp_wifi_set_mode(WIFI_MODE_AP);
-  esp_wifi_start();
+}
+
+static bool wifi_started = false;
+
+void startPwngridSniffing() {
+  if (!wifi_started) {
+    esp_wifi_start();
+    wifi_started = true;
+  }
   esp_wifi_set_promiscuous_filter(&filter);
-  esp_wifi_set_promiscuous(true);
   esp_wifi_set_promiscuous_rx_cb(&pwnSnifferCallback);
-  // esp_wifi_set_ps(WIFI_PS_NONE);
-  esp_wifi_set_channel(random(0, 14), WIFI_SECOND_CHAN_NONE);
-  delay(1);
+  esp_wifi_set_promiscuous(true);
+}
+
+void stopPwngridSniffing() {
+  esp_wifi_set_promiscuous(false);
+}
+
+static uint32_t wifi_phase_start = 0;
+
+// Dwell on each channel for 2 seconds, cycle through 1-11, then hand off to BLE
+static uint32_t channel_start_time = 0;
+static const uint16_t DWELL_TIME_MS = 2000;
+static const uint8_t MAX_CHANNEL = 11;
+
+bool pwngridTick(uint8_t &channel, char *session_id, String face) {
+  if (wifi_phase_start == 0) {
+    startPwngridSniffing();
+    wifi_phase_start = millis();
+    channel_start_time = 0;
+  }
+
+  // Set channel and send beacon once at start of each dwell
+  if (channel_start_time == 0) {
+    esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+    delay(10);
+    pwngridAdvertise(channel, session_id, face);
+    channel_start_time = millis();
+  }
+
+  // After dwell time, move to next channel
+  if (millis() - channel_start_time > DWELL_TIME_MS) {
+    channel++;
+    if (channel > MAX_CHANNEL) channel = 1;
+    channel_start_time = 0;
+  }
+
+  // End phase after cycling through all channels (~22 seconds)
+  if (millis() - wifi_phase_start > (uint32_t)DWELL_TIME_MS * MAX_CHANNEL) {
+    stopPwngridSniffing();
+    checkPwngridGoneFriends();
+    wifi_phase_start = 0;
+    return true;
+  }
+
+  return false;
 }

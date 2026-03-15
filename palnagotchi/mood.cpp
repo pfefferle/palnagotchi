@@ -27,7 +27,7 @@ String palnagotchi_default_moods[] = {
 };
 
 // ASCII mood faces
-String palnagotchi_small_moods[] = {
+String minigotchi_moods[] = {
     "(v_v)",  // 0 - sleeping
     "(=_=)",  // 1 - awakening
     "(O_O)",  // 2 - awake
@@ -78,7 +78,7 @@ String palnagotchi_moods_default_desc[] = {
 };
 
 // Mood descriptions
-String homeygotchi_moods_short_desc[] = {
+String minigotchi_moods_desc[] = {
     "Zzzz...",              // 0 - sleeping
     "...",                  // 1 - awakening
     "Let's MAKE FRIENDS!",  // 2 - awake
@@ -103,6 +103,41 @@ String homeygotchi_moods_short_desc[] = {
     "What?"                 // 21 - ultra random easter egg
 };
 
+// Porkchop faces (from M5PORKCHOP piglet avatar)
+String porkchop_faces[] = {
+    "(o 00)",   // 0 - neutral
+    "(^ 00)",   // 1 - happy
+    "(@ 00)",   // 2 - excited
+    "(= 00)",   // 3 - hunting
+    "(- 00)",   // 4 - sleepy
+    "(T 00)",   // 5 - sad
+    "(# 00)",   // 6 - angry
+};
+
+String crackling_moods[] = {
+    "(o00)",    // 0 - neutral
+    "(^00)",    // 1 - happy
+    "(@00)",    // 2 - excited
+    "(=00)",    // 3 - hunting
+    "(-00)",    // 4 - sleepy
+    "(T00)",    // 5 - sad
+    "(#00)",    // 6 - angry
+};
+
+String porkchop_phrases[] = {
+    "OINK OINK!",
+    "Truffle time!",
+    "SQUEEEAL!",
+    "Sniffing packets...",
+    "Snort... Zzz...",
+    "Need mud...",
+    "OINK! OINK! OINK!",
+};
+
+const int porkchop_count = sizeof(porkchop_faces) / sizeof(porkchop_faces[0]);
+
+String* porkchop_moods = porkchop_faces;
+
 String* palnagotchi_moods = palnagotchi_default_moods;
 String* palnagotchi_moods_desc = palnagotchi_moods_default_desc;
 
@@ -110,22 +145,51 @@ uint8_t current_mood = 0;
 String current_phrase = "";
 String current_face = "";
 bool current_broken = false;
+uint8_t current_theme = THEME_DEFAULT;
 
 uint8_t getCurrentMoodId() { return current_mood; }
 String getCurrentMoodFace() { return current_face; }
 String getCurrentMoodPhrase() { return current_phrase; }
 bool isCurrentMoodBroken() { return current_broken; }
+uint8_t getCurrentTheme() { return current_theme; }
+
+uint16_t getCurrentThemeColor() {
+  switch (current_theme) {
+    case THEME_PORKCHOP: return COLOR_PORKCHOP;
+    default:             return COLOR_DEFAULT;
+  }
+}
 
 void initMood() {
   if (M5.Display.width() <= 128) {
-    palnagotchi_moods = palnagotchi_small_moods;
-    palnagotchi_moods_desc = homeygotchi_moods_short_desc;
+    palnagotchi_moods = minigotchi_moods;
+    palnagotchi_moods_desc = minigotchi_moods_desc;
+    porkchop_moods = crackling_moods;
+  }
+}
+
+void setThemeMood(uint8_t theme) {
+  current_theme = theme;
+  current_broken = false;
+
+  switch (theme) {
+    case THEME_PORKCHOP: {
+      int idx = random(0, porkchop_count);
+      current_face = porkchop_moods[idx];
+      current_phrase = porkchop_phrases[idx];
+      break;
+    }
+    default:
+      current_theme = THEME_DEFAULT;
+      setMood(random(2, 21));
+      break;
   }
 }
 
 void setMood(uint8_t mood, String face, String phrase, bool broken) {
   current_mood = mood;
   current_broken = broken;
+  current_theme = THEME_DEFAULT;
 
   if (face != "") {
     current_face = face;

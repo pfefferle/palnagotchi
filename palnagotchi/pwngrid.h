@@ -25,6 +25,7 @@ typedef struct {
 
 void initPwngrid();
 esp_err_t pwngridAdvertise(uint8_t channel, char session_id[18], String face);
+bool pwngridTick(uint8_t &channel, char *session_id, String face);
 pwngrid_peer* getPwngridPeers();
 uint8_t getPwngridRunTotalPeers();
 String getPwngridLastFriendName();

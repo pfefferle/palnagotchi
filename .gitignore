@@ -2,3 +2,6 @@
 *.bin
 .DS_Store
 build
+.pio
+.clang_complete
+.gcc-flags.json

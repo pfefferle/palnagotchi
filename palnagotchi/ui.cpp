@@ -120,7 +120,7 @@ bool isPrevPressed() {
   #endif
 }
 
-void updateUi(bool show_toolbars) {
+void updateUi(bool show_toolbars, uint8_t channel) {
   #ifdef ARDUINO_M5STACK_CARDPUTER
     keyboard_changed = M5Cardputer.Keyboard.isChange();
   #else
@@ -143,10 +143,28 @@ void updateUi(bool show_toolbars) {
   uint8_t total_peers = 0;
   EEPROM.get(0, total_peers);
 
+  // Merge WiFi + BLE peer counts
+  uint8_t wifi_peers = getPwngridRunTotalPeers();
+  uint8_t ble_peers = getPwnbeaconRunTotalPeers();
+  uint8_t combined_run = wifi_peers + ble_peers;
+
+  // Pick last friend name and closest RSSI from whichever is more recent
+  String last_name = getPwngridLastFriendName();
+  signed int closest_rssi = getPwngridClosestRssi();
+  if (ble_peers > 0) {
+    if (last_name.length() == 0) {
+      last_name = getPwnbeaconLastFriendName();
+    }
+    int8_t ble_rssi = getPwnbeaconClosestRssi();
+    if (ble_rssi > closest_rssi) {
+      closest_rssi = ble_rssi;
+    }
+  }
+
   M5.Display.startWrite();
-  drawTopCanvas();
-  drawBottomCanvas(getPwngridRunTotalPeers(), total_peers,
-                   getPwngridLastFriendName(), getPwngridClosestRssi());
+  drawTopCanvas(channel);
+  drawBottomCanvas(combined_run, total_peers + ble_peers,
+                   last_name, closest_rssi);
 
   if (menu_open) {
     drawMenu();
@@ -162,7 +180,7 @@ void updateUi(bool show_toolbars) {
   M5.Display.endWrite();
 }
 
-void drawTopCanvas() {
+void drawTopCanvas(uint8_t channel) {
   unsigned long now = millis();
 
   if (now - lastBatteryUpdate > 2000) {
@@ -181,14 +199,22 @@ void drawTopCanvas() {
 
   canvas_top.fillSprite(BLACK);
   canvas_top.setTextSize(1);
-  canvas_top.setTextColor(GREEN);
-  canvas_top.setColor(GREEN);
+  uint16_t theme_color = getCurrentThemeColor();
+  canvas_top.setTextColor(theme_color);
+  canvas_top.setColor(theme_color);
   canvas_top.setTextDatum(top_left);
 
-  // Hide CH on M5Dial since it can't be seen anyway
   #if !defined(ARDUINO_M5STACK_DIAL)
-    canvas_top.drawString("CH *", 0, 5);
-  #endif 
+    char mode_str[24];
+    if (channel > 0) {
+      sprintf(mode_str, "CH %d", channel);
+    } else {
+      static uint8_t ble_anim = 0;
+      const char ble_spin[] = "|/-\\";
+      sprintf(mode_str, "BLE [%c]", ble_spin[ble_anim++ % 4]);
+    }
+    canvas_top.drawString(mode_str, 0, 5);
+  #endif
 
   unsigned long ellapsed = millis() / 1000;
   int8_t h = ellapsed / 3600;
@@ -238,8 +264,9 @@ void drawBottomCanvas(uint8_t friends_run, uint8_t friends_tot,
                       String last_friend_name, signed int rssi) {
   canvas_bot.fillSprite(BLACK);
   canvas_bot.setTextSize(1);
-  canvas_bot.setTextColor(GREEN);
-  canvas_bot.setColor(GREEN);
+  uint16_t theme_color = getCurrentThemeColor();
+  canvas_bot.setTextColor(theme_color);
+  canvas_bot.setColor(theme_color);
   canvas_bot.setTextDatum(top_left);
 
   #ifdef ARDUINO_M5STACK_DIAL
@@ -269,7 +296,7 @@ void drawBottomCanvas(uint8_t friends_run, uint8_t friends_tot,
 }
 
 void drawMood(String face, String phrase, bool broken) {
-  canvas_main.setTextColor(broken ? RED : GREEN);
+  canvas_main.setTextColor(broken ? RED : getCurrentThemeColor());
   canvas_main.setTextSize(4);
   canvas_main.setTextDatum(middle_center);
   canvas_main.fillSprite(BLACK);
@@ -307,21 +334,38 @@ void drawNearbyMenu() {
   canvas_main.setTextColor(GREEN);
   canvas_main.setTextDatum(top_left);
 
-  pwngrid_peer *pwngrid_peers = getPwngridPeers();
-  uint8_t len = getPwngridRunTotalPeers();
+  pwngrid_peer *wifi_peers = getPwngridPeers();
+  uint8_t wifi_len = getPwngridRunTotalPeers();
+  pwnbeacon_peer *ble_peers = getPwnbeaconPeers();
+  uint8_t ble_len = getPwnbeaconRunTotalPeers();
+  uint8_t total_len = wifi_len + ble_len;
 
-  if (len == 0) {
+  if (total_len == 0) {
     canvas_main.setTextColor(TFT_DARKGRAY);
     canvas_main.setCursor(0, PADDING);
     canvas_main.println("No nearby Pwnagotchis. Seriously?");
   }
 
   char display_str[50] = "";
-  for (uint8_t i = 0; i < len; i++) {
-    sprintf(display_str, "%s %s [%s]", (menu_current_opt == i) ? ">" : " ",
-            pwngrid_peers[i].name, getRssiBars(pwngrid_peers[i].rssi).c_str());
-    int y = PADDING + (i * ROW_SIZE / 2);
+  uint8_t row = 0;
+
+  // WiFi peers
+  for (uint8_t i = 0; i < wifi_len; i++) {
+    sprintf(display_str, "%s %s [%s]", (menu_current_opt == row) ? ">" : " ",
+            wifi_peers[i].name.c_str(), getRssiBars(wifi_peers[i].rssi).c_str());
+    int y = PADDING + (row * ROW_SIZE / 2);
     canvas_main.drawString(display_str, 0, y);
+    row++;
+  }
+
+  // BLE peers
+  for (uint8_t i = 0; i < ble_len; i++) {
+    if (ble_peers[i].gone) continue;
+    sprintf(display_str, "%s %s BLE[%s]", (menu_current_opt == row) ? ">" : " ",
+            ble_peers[i].name.c_str(), getRssiBars(ble_peers[i].rssi).c_str());
+    int y = PADDING + (row * ROW_SIZE / 2);
+    canvas_main.drawString(display_str, 0, y);
+    row++;
   }
 }
 
