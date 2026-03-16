@@ -70,7 +70,7 @@ void buildAdvPayload(uint8_t *buf, size_t *len) {
 }
 
 void pwnbeaconAddPeer(const uint8_t *data, size_t len, int8_t rssi,
-                      const char *ble_name) {
+                      const char *ble_name, const char *addr) {
   if (len < 10) return;
 
   pwnbeacon_adv adv;
@@ -100,7 +100,7 @@ void pwnbeaconAddPeer(const uint8_t *data, size_t len, int8_t rssi,
     name = "BLE peer";
   }
 
-  storageAddPeer(name.c_str(), "", fp_hex, "ble", rssi);
+  storageAddPeer(name.c_str(), "", fp_hex, "ble", rssi, addr);
 }
 
 // --- NimBLE Callbacks ---
@@ -112,8 +112,9 @@ class PwnBeaconScanCallbacks : public NimBLEScanCallbacks {
       if (device->getServiceDataUUID(i).equals(NimBLEUUID(PWNBEACON_SERVICE_UUID))) {
         std::string svcData = device->getServiceData(i);
         std::string devName = device->getName();
+        std::string addr = device->getAddress().toString();
         pwnbeaconAddPeer((const uint8_t *)svcData.data(), svcData.length(),
-                         device->getRSSI(), devName.c_str());
+                         device->getRSSI(), devName.c_str(), addr.c_str());
         break;
       }
     }
@@ -271,11 +272,100 @@ void pwnbeaconScan(uint16_t duration_ms) {
   }
 }
 
+// --- GATT Client ---
+
+bool pwnbeaconGattRead() {
+  storage_peer *peers = storageGetPeers();
+  uint8_t count = storageGetPeerCount();
+
+  // Find first BLE peer needing GATT data
+  int target = -1;
+  for (uint8_t i = 0; i < count; i++) {
+    if (peers[i].type == "ble" && !peers[i].full_data &&
+        !peers[i].gone && peers[i].ble_addr.length() > 0) {
+      target = i;
+      break;
+    }
+  }
+
+  if (target < 0) return false;
+
+  NimBLEClient *client = NimBLEDevice::createClient();
+  client->setConnectTimeout(2);
+
+  NimBLEAddress addr(std::string(peers[target].ble_addr.c_str()), 0);
+  if (!client->connect(addr)) {
+    NimBLEDevice::deleteClient(client);
+    peers[target].full_data = true;
+    return false;
+  }
+
+  bool got_data = false;
+
+  NimBLERemoteService *svc = client->getService(
+      NimBLEUUID(PWNBEACON_SERVICE_UUID));
+  if (svc) {
+    // Read full identity JSON
+    NimBLERemoteCharacteristic *id_char = svc->getCharacteristic(
+        NimBLEUUID(PWNBEACON_IDENTITY_CHAR_UUID));
+    if (id_char) {
+      std::string val = id_char->readValue();
+      if (val.length() > 0) {
+        JsonDocument doc;
+        if (deserializeJson(doc, val.c_str()) == DeserializationError::Ok) {
+          peers[target].identity = doc["identity"] | peers[target].identity;
+          peers[target].name     = doc["name"] | peers[target].name;
+          peers[target].face     = doc["face"] | peers[target].face;
+          got_data = true;
+        }
+      }
+    }
+
+    // Read face (may be more current than identity JSON)
+    NimBLERemoteCharacteristic *face_char = svc->getCharacteristic(
+        NimBLEUUID(PWNBEACON_FACE_CHAR_UUID));
+    if (face_char) {
+      std::string val = face_char->readValue();
+      if (val.length() > 0) {
+        peers[target].face = val.c_str();
+        got_data = true;
+      }
+    }
+
+    // Read full name
+    NimBLERemoteCharacteristic *name_char = svc->getCharacteristic(
+        NimBLEUUID(PWNBEACON_NAME_CHAR_UUID));
+    if (name_char) {
+      std::string val = name_char->readValue();
+      if (val.length() > 0) {
+        peers[target].name = val.c_str();
+        got_data = true;
+      }
+    }
+  }
+
+  client->disconnect();
+  NimBLEDevice::deleteClient(client);
+
+  peers[target].full_data = true;
+  if (got_data) {
+    storageLogPeer(peers[target].name.c_str(),
+                   peers[target].face.c_str(), "", "BLE GATT");
+    storageSavePeers();
+  }
+
+  return got_data;
+}
+
+// --- Tick ---
+
 static bool ble_phase_active = false;
+static bool ble_gatt_done = false;
 
 bool pwnbeaconTick(String face) {
   if (!ble_phase_active) {
     ble_phase_active = true;
+    ble_gatt_done = false;
     pwnbeaconAdvertise(face);
     pwnbeaconScan(3000);
     return false;
@@ -285,7 +375,13 @@ bool pwnbeaconTick(String face) {
     return false;
   }
 
-  // Scan done — stop advertising so WiFi can use the radio
+  // After scan, attempt one GATT read before ending phase
+  if (!ble_gatt_done) {
+    ble_gatt_done = true;
+    pwnbeaconGattRead();
+  }
+
+  // Done — stop advertising so WiFi can use the radio
   ble_advertising->stop();
   ble_phase_active = false;
   return true;

@@ -103,6 +103,13 @@ signed int storageGetClosestRssi() {
 
 // --- Peer mutations ---
 
+static void incrementEepromCounter() {
+  if (sd_available) return;
+  total_peers_eeprom++;
+  EEPROM.put(0, total_peers_eeprom);
+  EEPROM.commit();
+}
+
 static int findPeer(const char* identity, const char* type) {
   for (uint8_t i = 0; i < peer_count; i++) {
     if (peers[i].type == type && peers[i].identity == identity) {
@@ -114,25 +121,31 @@ static int findPeer(const char* identity, const char* type) {
 
 void storageAddPeer(const char* name, const char* face,
                     const char* identity, const char* type,
-                    signed int rssi) {
+                    signed int rssi, const char* ble_addr) {
   int idx = findPeer(identity, type);
   if (idx >= 0) {
     peers[idx].rssi = rssi;
     peers[idx].gone = false;
+    if (ble_addr && strlen(ble_addr) > 0) {
+      peers[idx].ble_addr = ble_addr;
+    }
     return;
   }
 
   if (peer_count >= STORAGE_MAX_PEERS) return;
 
-  peers[peer_count].name     = name;
-  peers[peer_count].face     = face ? face : "";
-  peers[peer_count].identity = identity;
-  peers[peer_count].type     = type;
-  peers[peer_count].rssi     = rssi;
-  peers[peer_count].gone     = false;
+  peers[peer_count].name      = name;
+  peers[peer_count].face      = face ? face : "";
+  peers[peer_count].identity  = identity;
+  peers[peer_count].type      = type;
+  peers[peer_count].rssi      = rssi;
+  peers[peer_count].gone      = false;
+  peers[peer_count].full_data = false;
+  peers[peer_count].ble_addr  = ble_addr ? ble_addr : "";
   last_friend_name = name;
   peer_count++;
 
+  incrementEepromCounter();
   storageLogPeer(name, face, "", type);
   storageSavePeers();
 }
@@ -140,12 +153,7 @@ void storageAddPeer(const char* name, const char* face,
 // --- Persistence ---
 
 void storageSavePeers() {
-  if (!sd_available) {
-    total_peers_eeprom++;
-    EEPROM.put(0, total_peers_eeprom);
-    EEPROM.commit();
-    return;
-  }
+  if (!sd_available) return;
 
   JsonDocument doc;
   JsonArray arr = doc.to<JsonArray>();
@@ -157,6 +165,12 @@ void storageSavePeers() {
     obj["identity"] = peers[i].identity;
     obj["type"]     = peers[i].type;
     obj["rssi"]     = peers[i].rssi;
+    if (peers[i].ble_addr.length() > 0) {
+      obj["ble_addr"] = peers[i].ble_addr;
+    }
+    if (peers[i].full_data) {
+      obj["full_data"] = true;
+    }
   }
 
   SD.remove("/palnagotchi/peers.json");
@@ -183,12 +197,14 @@ void storageLoadPeers() {
   for (JsonObject obj : arr) {
     if (peer_count >= STORAGE_MAX_PEERS) break;
 
-    peers[peer_count].name     = obj["name"] | "";
-    peers[peer_count].face     = obj["face"] | "";
-    peers[peer_count].identity = obj["identity"] | "";
-    peers[peer_count].type     = obj["type"] | "";
-    peers[peer_count].rssi     = obj["rssi"] | -100;
-    peers[peer_count].gone     = true;
+    peers[peer_count].name      = obj["name"] | "";
+    peers[peer_count].face      = obj["face"] | "";
+    peers[peer_count].identity  = obj["identity"] | "";
+    peers[peer_count].type      = obj["type"] | "";
+    peers[peer_count].ble_addr  = obj["ble_addr"] | "";
+    peers[peer_count].rssi      = obj["rssi"] | -100;
+    peers[peer_count].gone      = true;
+    peers[peer_count].full_data = obj["full_data"] | false;
     peer_count++;
   }
 }
