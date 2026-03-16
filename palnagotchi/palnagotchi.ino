@@ -56,7 +56,7 @@ void setRandomSessionId() {
 }
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   initStorage();
   setRandomSessionId();
   initM5();
@@ -65,6 +65,8 @@ void setup() {
   initPwngrid();
   storageLoadPeers();
   initUi();
+  // Random startup delay to break synchronization with nearby devices
+  delay(random(0, 5000));
 }
 
 uint8_t current_channel = 1;

@@ -71,7 +71,8 @@ void buildAdvPayload(uint8_t *buf, size_t *len) {
 }
 
 void pwnbeaconAddPeer(const uint8_t *data, size_t len, int8_t rssi,
-                      const char *ble_name, const char *addr) {
+                      const char *ble_name, const char *addr,
+                      uint8_t addr_type) {
   if (len < 10) return;
 
   pwnbeacon_adv adv;
@@ -101,7 +102,7 @@ void pwnbeaconAddPeer(const uint8_t *data, size_t len, int8_t rssi,
     name = "BLE peer";
   }
 
-  storageAddPeer(name.c_str(), "", fp_hex, "ble", rssi, addr);
+  storageAddPeer(name.c_str(), "", fp_hex, "ble", rssi, addr, addr_type);
 }
 
 // --- NimBLE Callbacks ---
@@ -114,8 +115,10 @@ class PwnBeaconScanCallbacks : public NimBLEScanCallbacks {
         std::string svcData = device->getServiceData(i);
         std::string devName = device->getName();
         std::string addr = device->getAddress().toString();
+        uint8_t addrType = device->getAddress().getType();
         pwnbeaconAddPeer((const uint8_t *)svcData.data(), svcData.length(),
-                         device->getRSSI(), devName.c_str(), addr.c_str());
+                         device->getRSSI(), devName.c_str(), addr.c_str(),
+                         addrType);
         break;
       }
     }
@@ -294,14 +297,19 @@ bool pwnbeaconGattRead() {
 
   if (target < 0) return false;
 
-  Serial.printf("[ble] gatt: connecting to %s\n", peers[target].ble_addr.c_str());
+  Serial.printf("[ble] gatt: connecting to %s (type=%d)\n", peers[target].ble_addr.c_str(), peers[target].ble_addr_type);
+
+  // Ensure scan is fully stopped before connecting
+  NimBLEDevice::getScan()->stop();
+  delay(50);
 
   NimBLEClient *client = NimBLEDevice::createClient();
-  client->setConnectTimeout(5);
+  client->setConnectTimeout(10000);
 
-  NimBLEAddress addr(std::string(peers[target].ble_addr.c_str()), 0);
+  NimBLEAddress addr(std::string(peers[target].ble_addr.c_str()), peers[target].ble_addr_type);
   if (!client->connect(addr)) {
-    Serial.printf("[ble] gatt: connection failed to %s\n", peers[target].ble_addr.c_str());
+    Serial.printf("[ble] gatt: connection failed to %s (rc=%d)\n",
+                  peers[target].ble_addr.c_str(), client->getLastError());
     NimBLEDevice::deleteClient(client);
     return false;
   }
@@ -385,30 +393,59 @@ bool pwnbeaconGattRead() {
 // --- Tick ---
 
 static bool ble_phase_active = false;
-static bool ble_gatt_done = false;
+static uint32_t ble_phase_start = 0;
+static uint8_t ble_scan_count = 0;
+static bool ble_is_connector = false;
+static const uint8_t BLE_MAX_SCANS = 3;
+static const uint32_t BLE_PHASE_MAX_MS = 20000;
+// Beacon-only mode: just advertise for this long so peers can connect to us
+static const uint32_t BLE_BEACON_DURATION_MS = 12000;
 
 bool pwnbeaconTick(String face) {
   if (!ble_phase_active) {
     ble_phase_active = true;
-    ble_gatt_done = false;
+    ble_phase_start = millis();
+    ble_scan_count = 0;
     pwnbeaconAdvertise(face);
-    pwnbeaconScan(3000 + random(0, 3000));
+
+    // Randomly choose role: connector (scan + GATT client) or beacon (just advertise)
+    ble_is_connector = (random(0, 2) == 0);
+    Serial.printf("[ble] phase start, role=%s\n", ble_is_connector ? "connector" : "beacon");
+
+    if (ble_is_connector) {
+      pwnbeaconScan(3000 + random(0, 3000));
+    }
     return false;
   }
 
+  // Beacon mode: just wait while advertising, let peers connect to us
+  if (!ble_is_connector) {
+    if (millis() - ble_phase_start > BLE_BEACON_DURATION_MS) {
+      ble_advertising->stop();
+      ble_phase_active = false;
+      return true;
+    }
+    return false;
+  }
+
+  // Connector mode: scan, then GATT connect
   if (isPwnbeaconScanning()) {
     return false;
   }
 
-  // After scan, attempt one GATT read before ending phase
-  if (!ble_gatt_done) {
-    ble_gatt_done = true;
+  pwnbeaconGattRead();
+
+  ble_scan_count++;
+
+  // Check if we should end the BLE phase
+  if (ble_scan_count >= BLE_MAX_SCANS ||
+      millis() - ble_phase_start > BLE_PHASE_MAX_MS) {
     ble_advertising->stop();
-    pwnbeaconGattRead();
+    ble_phase_active = false;
+    return true;
   }
 
-  // Done — stop advertising so WiFi can use the radio
-  ble_advertising->stop();
-  ble_phase_active = false;
-  return true;
+  // Start another scan cycle
+  pwnbeaconScan(3000 + random(0, 3000));
+  return false;
 }

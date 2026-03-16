@@ -159,6 +159,7 @@ void stopPwngridSniffing() {
 }
 
 static uint32_t wifi_phase_start = 0;
+static uint32_t wifi_phase_duration = 0;
 
 // Dwell on each channel with jitter, randomized order, then hand off to BLE
 static uint32_t channel_start_time = 0;
@@ -184,6 +185,7 @@ bool pwngridTick(uint8_t &channel, char *session_id, String face) {
   if (wifi_phase_start == 0) {
     startPwngridSniffing();
     wifi_phase_start = millis();
+    wifi_phase_duration = (uint32_t)DWELL_TIME_MS * MAX_CHANNEL + random(0, 15000);
     channel_start_time = 0;
     channel_index = 0;
     shuffleChannels();
@@ -206,8 +208,8 @@ bool pwngridTick(uint8_t &channel, char *session_id, String face) {
     channel_start_time = 0;
   }
 
-  // End phase after cycling through all channels
-  if (millis() - wifi_phase_start > (uint32_t)DWELL_TIME_MS * MAX_CHANNEL) {
+  // End phase after randomized duration (22-32s)
+  if (millis() - wifi_phase_start > wifi_phase_duration) {
     stopPwngridSniffing();
     wifi_phase_start = 0;
     return true;

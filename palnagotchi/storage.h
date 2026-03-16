@@ -11,6 +11,7 @@ typedef struct {
   String     identity;
   String     type;       // "wifi" or "ble"
   String     ble_addr;   // BLE address for GATT connections
+  uint8_t    ble_addr_type; // BLE address type (0=public, 1=random)
   signed int rssi;
   bool       gone;
   bool       full_data;  // true after GATT read for BLE peers
@@ -29,7 +30,8 @@ signed int storageGetClosestRssi();
 // Peer mutations (called by pwngrid/pwnbeacon)
 void     storageAddPeer(const char* name, const char* face,
                         const char* identity, const char* type,
-                        signed int rssi, const char* ble_addr = "");
+                        signed int rssi, const char* ble_addr = "",
+                        uint8_t ble_addr_type = 0);
 // Persistence
 void     storageSavePeers();
 void     storageLoadPeers();
