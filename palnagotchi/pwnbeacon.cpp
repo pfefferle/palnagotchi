@@ -5,14 +5,6 @@
 #include <NimBLEDevice.h>
 #include <mbedtls/sha256.h>
 
-uint8_t pwnbeacon_friends_run = 0;
-pwnbeacon_peer pwnbeacon_peers[PWNBEACON_MAX_PEERS];
-String pwnbeacon_last_friend_name = "";
-
-uint8_t getPwnbeaconRunTotalPeers() { return pwnbeacon_friends_run; }
-String getPwnbeaconLastFriendName() { return pwnbeacon_last_friend_name; }
-pwnbeacon_peer *getPwnbeaconPeers() { return pwnbeacon_peers; }
-
 char pwnbeacon_name[PWNBEACON_ADV_MAX_NAME_LEN + 1] = {0};
 char pwnbeacon_identity[129] = {0};
 char pwnbeacon_face[64] = "(O__O)";
@@ -77,76 +69,38 @@ void buildAdvPayload(uint8_t *buf, size_t *len) {
   memcpy(buf, &adv, *len);
 }
 
-int findPeerByFingerprint(const uint8_t *fp) {
-  for (uint8_t i = 0; i < pwnbeacon_friends_run; i++) {
-    if (memcmp(pwnbeacon_peers[i].fingerprint, fp, PWNBEACON_FINGERPRINT_LEN) == 0) {
-      return i;
-    }
-  }
-  return -1;
-}
-
 void pwnbeaconAddPeer(const uint8_t *data, size_t len, int8_t rssi,
                       const char *ble_name) {
-  if (len < 10) {
-    return;
-  }
+  if (len < 10) return;
 
   pwnbeacon_adv adv;
   memset(&adv, 0, sizeof(adv));
   size_t copy_len = len < sizeof(adv) ? len : sizeof(adv);
   memcpy(&adv, data, copy_len);
 
-  if (adv.version != PWNBEACON_PROTOCOL_VERSION) {
-    return;
+  if (adv.version != PWNBEACON_PROTOCOL_VERSION) return;
+  if (memcmp(adv.fingerprint, pwnbeacon_fingerprint, PWNBEACON_FINGERPRINT_LEN) == 0) return;
+
+  // Build fingerprint hex string as identity
+  char fp_hex[PWNBEACON_FINGERPRINT_LEN * 2 + 1];
+  for (int i = 0; i < PWNBEACON_FINGERPRINT_LEN; i++) {
+    snprintf(fp_hex + i * 2, 3, "%02x", adv.fingerprint[i]);
   }
 
-  if (memcmp(adv.fingerprint, pwnbeacon_fingerprint, PWNBEACON_FINGERPRINT_LEN) == 0) {
-    return;
-  }
-
-  int idx = findPeerByFingerprint(adv.fingerprint);
-
-  if (idx >= 0) {
-    pwnbeacon_peers[idx].rssi = rssi;
-    pwnbeacon_peers[idx].last_seen = millis();
-    pwnbeacon_peers[idx].gone = false;
-    pwnbeacon_peers[idx].pwnd_run = adv.pwnd_run;
-    pwnbeacon_peers[idx].pwnd_tot = adv.pwnd_tot;
-    return;
-  }
-
-  if (pwnbeacon_friends_run >= PWNBEACON_MAX_PEERS) {
-    return;
-  }
-
+  // Resolve name
   uint8_t name_len = adv.name_len;
-  if (name_len > PWNBEACON_ADV_MAX_NAME_LEN) {
-    name_len = PWNBEACON_ADV_MAX_NAME_LEN;
-  }
+  if (name_len > PWNBEACON_ADV_MAX_NAME_LEN) name_len = PWNBEACON_ADV_MAX_NAME_LEN;
 
-  memset(&pwnbeacon_peers[pwnbeacon_friends_run], 0, sizeof(pwnbeacon_peer));
+  String name;
   if (name_len > 0) {
-    pwnbeacon_peers[pwnbeacon_friends_run].name = String(adv.name).substring(0, name_len);
+    name = String(adv.name).substring(0, name_len);
   } else if (ble_name && strlen(ble_name) > 0) {
-    pwnbeacon_peers[pwnbeacon_friends_run].name = String(ble_name);
+    name = String(ble_name);
   } else {
-    pwnbeacon_peers[pwnbeacon_friends_run].name = "BLE peer";
+    name = "BLE peer";
   }
-  pwnbeacon_peers[pwnbeacon_friends_run].pwnd_run = adv.pwnd_run;
-  pwnbeacon_peers[pwnbeacon_friends_run].pwnd_tot = adv.pwnd_tot;
-  pwnbeacon_peers[pwnbeacon_friends_run].rssi = rssi;
-  pwnbeacon_peers[pwnbeacon_friends_run].last_seen = millis();
-  pwnbeacon_peers[pwnbeacon_friends_run].gone = false;
-  pwnbeacon_peers[pwnbeacon_friends_run].full_data = false;
-  memcpy(pwnbeacon_peers[pwnbeacon_friends_run].fingerprint, adv.fingerprint,
-         PWNBEACON_FINGERPRINT_LEN);
 
-  pwnbeacon_last_friend_name = pwnbeacon_peers[pwnbeacon_friends_run].name;
-  pwnbeacon_friends_run++;
-
-  storageLogPeer(pwnbeacon_peers[pwnbeacon_friends_run - 1].name.c_str(),
-                 "", "", "BLE");
+  storageAddPeer(name.c_str(), "", fp_hex, "ble", rssi);
 }
 
 // --- NimBLE Callbacks ---
@@ -317,27 +271,6 @@ void pwnbeaconScan(uint16_t duration_ms) {
   }
 }
 
-void checkPwnbeaconGonePeers() {
-  for (uint8_t i = 0; i < pwnbeacon_friends_run; i++) {
-    uint32_t away_ms = millis() - pwnbeacon_peers[i].last_seen;
-    if (away_ms > PEER_AWAY_THRESHOLD_MS) {
-      pwnbeacon_peers[i].gone = true;
-    }
-  }
-}
-
-signed int getPwnbeaconClosestRssi() {
-  signed int closest = -1000;
-
-  for (uint8_t i = 0; i < pwnbeacon_friends_run; i++) {
-    if (pwnbeacon_peers[i].gone == false && pwnbeacon_peers[i].rssi > closest) {
-      closest = pwnbeacon_peers[i].rssi;
-    }
-  }
-
-  return closest;
-}
-
 static bool ble_phase_active = false;
 
 bool pwnbeaconTick(String face) {
@@ -347,8 +280,6 @@ bool pwnbeaconTick(String face) {
     pwnbeaconScan(3000);
     return false;
   }
-
-  checkPwnbeaconGonePeers();
 
   if (isPwnbeaconScanning()) {
     return false;

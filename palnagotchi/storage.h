@@ -3,13 +3,34 @@
 #include "Arduino.h"
 
 #define STORAGE_LOG_RING_SIZE 32
+#define STORAGE_MAX_PEERS     64
+
+typedef struct {
+  String     name;
+  String     face;
+  String     identity;
+  String     type;       // "wifi" or "ble"
+  signed int rssi;
+  bool       gone;
+} storage_peer;
 
 void     initStorage();
 bool     isSdAvailable();
 
-// Peer counter (EEPROM)
-uint16_t storageGetTotalPeers();
-void     storageIncrementTotalPeers();
+// Unified peer access
+storage_peer* storageGetPeers();
+uint8_t    storageGetPeerCount();
+uint16_t   storageGetTotalPeers();
+String     storageGetLastFriendName();
+signed int storageGetClosestRssi();
+
+// Peer mutations (called by pwngrid/pwnbeacon)
+void     storageAddPeer(const char* name, const char* face,
+                        const char* identity, const char* type,
+                        signed int rssi);
+// Persistence
+void     storageSavePeers();
+void     storageLoadPeers();
 
 // Chat log (SD card if available, always in ring buffer)
 void     storageLogPeer(const char* name, const char* face,
