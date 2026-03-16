@@ -133,6 +133,17 @@ void pwnSnifferCallback(void *buf, wifi_promiscuous_pkt_type_t type) {
   }
 }
 
+static void setApSsid(const char* ssid) {
+  wifi_config_t ap_config;
+  memset(&ap_config, 0, sizeof(ap_config));
+  strncpy((char*)ap_config.ap.ssid, ssid, sizeof(ap_config.ap.ssid) - 1);
+  ap_config.ap.ssid_len = strlen(ssid);
+  ap_config.ap.channel = 1;
+  ap_config.ap.authmode = WIFI_AUTH_OPEN;
+  ap_config.ap.max_connection = 2;
+  esp_wifi_set_config(WIFI_IF_AP, &ap_config);
+}
+
 void initPwngrid() {
   esp_log_level_set("wifi", ESP_LOG_NONE);
 
@@ -140,6 +151,7 @@ void initPwngrid() {
   esp_wifi_init(&WIFI_INIT_CONFIG);
   esp_wifi_set_storage(WIFI_STORAGE_RAM);
   esp_wifi_set_mode(WIFI_MODE_AP);
+  setApSsid(PALNAGOTCHI_NAME);
 }
 
 static bool wifi_started = false;

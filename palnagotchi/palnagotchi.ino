@@ -17,6 +17,7 @@
 #include "pwnbeacon.h"
 #include "storage.h"
 #include "ui.h"
+#include "webui.h"
 
 #define STATE_INIT 0
 #define STATE_WAKE 1
@@ -64,6 +65,7 @@ void setup() {
   initPwnbeacon();
   initPwngrid();
   storageLoadPeers();
+  initWebUi();
   initUi();
 }
 
@@ -97,6 +99,8 @@ void loop() {
   #ifdef ARDUINO_M5STACK_CARDPUTER
     M5Cardputer.update();
   #endif
+
+  webUiTick();
 
   if (state == STATE_HALT) return;
 
