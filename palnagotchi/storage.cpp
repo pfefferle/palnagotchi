@@ -103,6 +103,13 @@ signed int storageGetClosestRssi() {
 
 // --- Peer mutations ---
 
+static void incrementEepromCounter() {
+  if (sd_available) return;
+  total_peers_eeprom++;
+  EEPROM.put(0, total_peers_eeprom);
+  EEPROM.commit();
+}
+
 static int findPeer(const char* identity, const char* type) {
   for (uint8_t i = 0; i < peer_count; i++) {
     if (peers[i].type == type && peers[i].identity == identity) {
@@ -138,6 +145,7 @@ void storageAddPeer(const char* name, const char* face,
   last_friend_name = name;
   peer_count++;
 
+  incrementEepromCounter();
   storageLogPeer(name, face, "", type);
   storageSavePeers();
 }
@@ -145,12 +153,7 @@ void storageAddPeer(const char* name, const char* face,
 // --- Persistence ---
 
 void storageSavePeers() {
-  if (!sd_available) {
-    total_peers_eeprom++;
-    EEPROM.put(0, total_peers_eeprom);
-    EEPROM.commit();
-    return;
-  }
+  if (!sd_available) return;
 
   JsonDocument doc;
   JsonArray arr = doc.to<JsonArray>();
@@ -164,6 +167,9 @@ void storageSavePeers() {
     obj["rssi"]     = peers[i].rssi;
     if (peers[i].ble_addr.length() > 0) {
       obj["ble_addr"] = peers[i].ble_addr;
+    }
+    if (peers[i].full_data) {
+      obj["full_data"] = true;
     }
   }
 
@@ -198,7 +204,7 @@ void storageLoadPeers() {
     peers[peer_count].ble_addr  = obj["ble_addr"] | "";
     peers[peer_count].rssi      = obj["rssi"] | -100;
     peers[peer_count].gone      = true;
-    peers[peer_count].full_data = false;
+    peers[peer_count].full_data = obj["full_data"] | false;
     peer_count++;
   }
 }

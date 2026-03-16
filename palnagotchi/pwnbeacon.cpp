@@ -300,6 +300,8 @@ bool pwnbeaconGattRead() {
     return false;
   }
 
+  bool got_data = false;
+
   NimBLERemoteService *svc = client->getService(
       NimBLEUUID(PWNBEACON_SERVICE_UUID));
   if (svc) {
@@ -314,6 +316,7 @@ bool pwnbeaconGattRead() {
           peers[target].identity = doc["identity"] | peers[target].identity;
           peers[target].name     = doc["name"] | peers[target].name;
           peers[target].face     = doc["face"] | peers[target].face;
+          got_data = true;
         }
       }
     }
@@ -325,6 +328,7 @@ bool pwnbeaconGattRead() {
       std::string val = face_char->readValue();
       if (val.length() > 0) {
         peers[target].face = val.c_str();
+        got_data = true;
       }
     }
 
@@ -335,6 +339,7 @@ bool pwnbeaconGattRead() {
       std::string val = name_char->readValue();
       if (val.length() > 0) {
         peers[target].name = val.c_str();
+        got_data = true;
       }
     }
   }
@@ -343,11 +348,13 @@ bool pwnbeaconGattRead() {
   NimBLEDevice::deleteClient(client);
 
   peers[target].full_data = true;
-  storageLogPeer(peers[target].name.c_str(),
-                 peers[target].face.c_str(), "", "BLE GATT");
-  storageSavePeers();
+  if (got_data) {
+    storageLogPeer(peers[target].name.c_str(),
+                   peers[target].face.c_str(), "", "BLE GATT");
+    storageSavePeers();
+  }
 
-  return true;
+  return got_data;
 }
 
 // --- Tick ---
