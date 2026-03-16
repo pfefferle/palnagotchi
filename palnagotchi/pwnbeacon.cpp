@@ -1,6 +1,7 @@
 #include "pwnbeacon.h"
 #include "config.h"
 #include "storage.h"
+#include "mood.h"
 #include <ArduinoJson.h>
 #include <NimBLEDevice.h>
 #include <mbedtls/sha256.h>
@@ -213,6 +214,9 @@ esp_err_t pwnbeaconAdvertise(String face) {
   if (char_identity) {
     char_identity->setValue(buildIdentityJson());
   }
+  if (char_message) {
+    char_message->setValue(getCurrentMoodPhrase().c_str());
+  }
 
   // Build compact advertisement payload
   uint8_t adv_payload[sizeof(pwnbeacon_adv)];
@@ -290,21 +294,27 @@ bool pwnbeaconGattRead() {
 
   if (target < 0) return false;
 
+  Serial.printf("[ble] gatt: connecting to %s\n", peers[target].ble_addr.c_str());
+
   NimBLEClient *client = NimBLEDevice::createClient();
-  client->setConnectTimeout(2);
+  client->setConnectTimeout(5);
 
   NimBLEAddress addr(std::string(peers[target].ble_addr.c_str()), 0);
   if (!client->connect(addr)) {
+    Serial.printf("[ble] gatt: connection failed to %s\n", peers[target].ble_addr.c_str());
     NimBLEDevice::deleteClient(client);
-    peers[target].full_data = true;
     return false;
   }
+
+  Serial.printf("[ble] gatt: connected to %s\n", peers[target].ble_addr.c_str());
 
   bool got_data = false;
 
   NimBLERemoteService *svc = client->getService(
       NimBLEUUID(PWNBEACON_SERVICE_UUID));
   if (svc) {
+    Serial.println("[ble] gatt: found service");
+
     // Read full identity JSON
     NimBLERemoteCharacteristic *id_char = svc->getCharacteristic(
         NimBLEUUID(PWNBEACON_IDENTITY_CHAR_UUID));
@@ -342,6 +352,18 @@ bool pwnbeaconGattRead() {
         got_data = true;
       }
     }
+
+    // Read message
+    NimBLERemoteCharacteristic *msg_char = svc->getCharacteristic(
+        NimBLEUUID(PWNBEACON_MESSAGE_CHAR_UUID));
+    if (msg_char) {
+      std::string val = msg_char->readValue();
+      if (val.length() > 0) {
+        storageLogMessage(peers[target].name.c_str(), val.c_str());
+      }
+    }
+  } else {
+    Serial.println("[ble] gatt: service not found");
   }
 
   client->disconnect();
@@ -349,9 +371,12 @@ bool pwnbeaconGattRead() {
 
   peers[target].full_data = true;
   if (got_data) {
+    Serial.printf("[ble] gatt: got data for %s\n", peers[target].name.c_str());
     storageLogPeer(peers[target].name.c_str(),
                    peers[target].face.c_str(), "", "BLE GATT");
     storageSavePeers();
+  } else {
+    Serial.println("[ble] gatt: no data received");
   }
 
   return got_data;
@@ -367,7 +392,7 @@ bool pwnbeaconTick(String face) {
     ble_phase_active = true;
     ble_gatt_done = false;
     pwnbeaconAdvertise(face);
-    pwnbeaconScan(3000);
+    pwnbeaconScan(3000 + random(0, 3000));
     return false;
   }
 
@@ -378,6 +403,7 @@ bool pwnbeaconTick(String face) {
   // After scan, attempt one GATT read before ending phase
   if (!ble_gatt_done) {
     ble_gatt_done = true;
+    ble_advertising->stop();
     pwnbeaconGattRead();
   }
 

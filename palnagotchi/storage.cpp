@@ -110,9 +110,9 @@ static void incrementEepromCounter() {
   EEPROM.commit();
 }
 
-static int findPeer(const char* identity, const char* type) {
+static int findPeer(const char* identity) {
   for (uint8_t i = 0; i < peer_count; i++) {
-    if (peers[i].type == type && peers[i].identity == identity) {
+    if (peers[i].identity == identity) {
       return i;
     }
   }
@@ -122,12 +122,25 @@ static int findPeer(const char* identity, const char* type) {
 void storageAddPeer(const char* name, const char* face,
                     const char* identity, const char* type,
                     signed int rssi, const char* ble_addr) {
-  int idx = findPeer(identity, type);
+  int idx = findPeer(identity);
   if (idx >= 0) {
     peers[idx].rssi = rssi;
+    bool was_gone = peers[idx].gone;
     peers[idx].gone = false;
+    if (was_gone) {
+      peers[idx].full_data = false;
+    }
+    if (name && strlen(name) > 0 && String(name) != "BLE peer") {
+      peers[idx].name = name;
+    }
+    if (face && strlen(face) > 0) {
+      peers[idx].face = face;
+    }
     if (ble_addr && strlen(ble_addr) > 0) {
       peers[idx].ble_addr = ble_addr;
+    }
+    if (strcmp(type, "ble") == 0) {
+      peers[idx].type = type;
     }
     return;
   }
