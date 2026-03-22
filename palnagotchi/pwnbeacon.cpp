@@ -32,7 +32,7 @@ String buildIdentityJson() {
   JsonDocument doc;
 
   doc["pal"]          = true;
-  doc["name"]         = pwnbeacon_name;
+  doc["name"]         = PALNAGOTCHI_NAME;
   doc["face"]         = pwnbeacon_face;
   doc["epoch"]        = 1;
   doc["grid_version"] = "2.0.0-ble";
@@ -155,7 +155,30 @@ class MessageCallbacks : public NimBLECharacteristicCallbacks {
 // --- Public API ---
 
 void initPwnbeacon() {
-  strncpy(pwnbeacon_name, "Palnagot", PWNBEACON_ADV_MAX_NAME_LEN);
+  // Shorten name for advertisement: strip vowels first, then truncate if needed
+  const char *full = PALNAGOTCHI_NAME;
+  size_t full_len = strlen(full);
+
+  if (full_len <= PWNBEACON_ADV_MAX_NAME_LEN) {
+    strncpy(pwnbeacon_name, full, PWNBEACON_ADV_MAX_NAME_LEN);
+  } else {
+    // Try removing vowels (keep first character regardless)
+    char stripped[128];
+    size_t j = 0;
+    for (size_t i = 0; i < full_len && j < sizeof(stripped) - 1; i++) {
+      if (i == 0 || !strchr("aeiouAEIOU", full[i])) {
+        stripped[j++] = full[i];
+      }
+    }
+    stripped[j] = '\0';
+
+    // Use stripped version if it fits, otherwise truncate original
+    if (j <= PWNBEACON_ADV_MAX_NAME_LEN) {
+      strncpy(pwnbeacon_name, stripped, PWNBEACON_ADV_MAX_NAME_LEN);
+    } else {
+      strncpy(pwnbeacon_name, full, PWNBEACON_ADV_MAX_NAME_LEN);
+    }
+  }
   pwnbeacon_name[PWNBEACON_ADV_MAX_NAME_LEN] = '\0';
   strncpy(pwnbeacon_identity, PALNAGOTCHI_IDENTITY,
           sizeof(pwnbeacon_identity) - 1);
@@ -183,7 +206,7 @@ void initPwnbeacon() {
   // Name (read)
   char_name = service->createCharacteristic(
       PWNBEACON_NAME_CHAR_UUID, NIMBLE_PROPERTY::READ);
-  char_name->setValue(pwnbeacon_name);
+  char_name->setValue(PALNAGOTCHI_NAME);
 
   // Signal — write-only ping/poke
   char_signal = service->createCharacteristic(
