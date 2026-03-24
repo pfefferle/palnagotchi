@@ -159,21 +159,42 @@ void stopPwngridSniffing() {
 }
 
 static uint32_t wifi_phase_start = 0;
+static uint32_t wifi_phase_duration = 0;
 
-// Dwell on each channel for 2 seconds, cycle through 1-11, then hand off to BLE
+// Dwell on each channel with jitter, randomized order, then hand off to BLE
 static uint32_t channel_start_time = 0;
 static const uint16_t DWELL_TIME_MS = 2000;
 static const uint8_t MAX_CHANNEL = 11;
+static uint8_t channel_order[MAX_CHANNEL];
+static uint8_t channel_index = 0;
+static uint16_t current_dwell = 0;
+
+static void shuffleChannels() {
+  for (uint8_t i = 0; i < MAX_CHANNEL; i++) {
+    channel_order[i] = i + 1;
+  }
+  for (uint8_t i = MAX_CHANNEL - 1; i > 0; i--) {
+    uint8_t j = esp_random() % (i + 1);
+    uint8_t tmp = channel_order[i];
+    channel_order[i] = channel_order[j];
+    channel_order[j] = tmp;
+  }
+}
 
 bool pwngridTick(uint8_t &channel, char *session_id, String face) {
   if (wifi_phase_start == 0) {
     startPwngridSniffing();
     wifi_phase_start = millis();
+    wifi_phase_duration = (uint32_t)DWELL_TIME_MS * MAX_CHANNEL + random(0, 15000);
     channel_start_time = 0;
+    channel_index = 0;
+    shuffleChannels();
   }
 
   // Set channel and send beacon once at start of each dwell
   if (channel_start_time == 0) {
+    channel = channel_order[channel_index];
+    current_dwell = DWELL_TIME_MS + random(0, 500);
     esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
     delay(10);
     pwngridAdvertise(channel, session_id, face);
@@ -181,14 +202,14 @@ bool pwngridTick(uint8_t &channel, char *session_id, String face) {
   }
 
   // After dwell time, move to next channel
-  if (millis() - channel_start_time > DWELL_TIME_MS) {
-    channel++;
-    if (channel > MAX_CHANNEL) channel = 1;
+  if (millis() - channel_start_time > current_dwell) {
+    channel_index++;
+    if (channel_index >= MAX_CHANNEL) channel_index = 0;
     channel_start_time = 0;
   }
 
-  // End phase after cycling through all channels (~22 seconds)
-  if (millis() - wifi_phase_start > (uint32_t)DWELL_TIME_MS * MAX_CHANNEL) {
+  // End phase after randomized duration (22-32s)
+  if (millis() - wifi_phase_start > wifi_phase_duration) {
     stopPwngridSniffing();
     wifi_phase_start = 0;
     return true;

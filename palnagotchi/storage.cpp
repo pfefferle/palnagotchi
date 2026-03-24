@@ -110,9 +110,9 @@ static void incrementEepromCounter() {
   EEPROM.commit();
 }
 
-static int findPeer(const char* identity, const char* type) {
+static int findPeer(const char* identity) {
   for (uint8_t i = 0; i < peer_count; i++) {
-    if (peers[i].type == type && peers[i].identity == identity) {
+    if (peers[i].identity == identity) {
       return i;
     }
   }
@@ -121,13 +121,28 @@ static int findPeer(const char* identity, const char* type) {
 
 void storageAddPeer(const char* name, const char* face,
                     const char* identity, const char* type,
-                    signed int rssi, const char* ble_addr) {
-  int idx = findPeer(identity, type);
+                    signed int rssi, const char* ble_addr,
+                    uint8_t ble_addr_type) {
+  int idx = findPeer(identity);
   if (idx >= 0) {
     peers[idx].rssi = rssi;
+    bool was_gone = peers[idx].gone;
     peers[idx].gone = false;
+    if (was_gone) {
+      peers[idx].full_data = false;
+    }
+    if (name && strlen(name) > 0 && String(name) != "BLE peer") {
+      peers[idx].name = name;
+    }
+    if (face && strlen(face) > 0) {
+      peers[idx].face = face;
+    }
     if (ble_addr && strlen(ble_addr) > 0) {
       peers[idx].ble_addr = ble_addr;
+      peers[idx].ble_addr_type = ble_addr_type;
+    }
+    if (strcmp(type, "ble") == 0) {
+      peers[idx].type = type;
     }
     return;
   }
@@ -142,6 +157,7 @@ void storageAddPeer(const char* name, const char* face,
   peers[peer_count].gone      = false;
   peers[peer_count].full_data = false;
   peers[peer_count].ble_addr  = ble_addr ? ble_addr : "";
+  peers[peer_count].ble_addr_type = ble_addr_type;
   last_friend_name = name;
   peer_count++;
 
@@ -167,6 +183,7 @@ void storageSavePeers() {
     obj["rssi"]     = peers[i].rssi;
     if (peers[i].ble_addr.length() > 0) {
       obj["ble_addr"] = peers[i].ble_addr;
+      obj["ble_addr_type"] = peers[i].ble_addr_type;
     }
     if (peers[i].full_data) {
       obj["full_data"] = true;
@@ -202,6 +219,7 @@ void storageLoadPeers() {
     peers[peer_count].identity  = obj["identity"] | "";
     peers[peer_count].type      = obj["type"] | "";
     peers[peer_count].ble_addr  = obj["ble_addr"] | "";
+    peers[peer_count].ble_addr_type = obj["ble_addr_type"] | 0;
     peers[peer_count].rssi      = obj["rssi"] | -100;
     peers[peer_count].gone      = true;
     peers[peer_count].full_data = obj["full_data"] | false;
