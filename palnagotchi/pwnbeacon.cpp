@@ -400,8 +400,9 @@ bool pwnbeaconGattRead() {
   client->disconnect();
   NimBLEDevice::deleteClient(client);
 
-  peers[target].full_data = true;
   if (got_data) {
+    peers[target].full_data = true;
+    storageSetLastFriendName(peers[target].name);
     Serial.printf("[ble] gatt: got data for %s\n", peers[target].name.c_str());
     storageLogPeer(peers[target].name.c_str(),
                    peers[target].face.c_str(), "", "BLE GATT");

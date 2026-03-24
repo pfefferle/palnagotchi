@@ -91,6 +91,10 @@ String storageGetLastFriendName() {
   return last_friend_name;
 }
 
+void storageSetLastFriendName(const String& name) {
+  last_friend_name = name;
+}
+
 signed int storageGetClosestRssi() {
   signed int closest = -1000;
   for (uint8_t i = 0; i < peer_count; i++) {
