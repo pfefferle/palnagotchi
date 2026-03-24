@@ -8,7 +8,7 @@ The Pwngrid works by sending Wifi beacon frames with a JSON serialized payload i
 
 ## PwnBeacon (BLE)
 
-In addition to the WiFi-based Pwngrid protocol, Palnagotchi supports **PwnBeacon** — a compact BLE (Bluetooth Low Energy) protocol for peer discovery. PwnBeacon advertises a binary packet containing the unit's name, fingerprint, and pwn counts via BLE, and scans for other PwnBeacon-enabled devices nearby. This allows Palnagotchis and Palnagotchis to find each other over Bluetooth, complementing the WiFi beacon approach.
+In addition to the WiFi-based Pwngrid protocol, Palnagotchi supports **[PwnBeacon](https://github.com/pfefferle/PwnBeacon)** — a compact BLE (Bluetooth Low Energy) protocol for peer discovery. PwnBeacon advertises a binary packet containing the unit's name, fingerprint, and pwn counts via BLE, and scans for other PwnBeacon-enabled devices nearby. This allows Palnagotchis and Palnagotchis to find each other over Bluetooth, complementing the WiFi beacon approach.
 
 PwnBeacon also exposes a GATT service with characteristics for identity, face, name, signal strength, and messages, enabling richer interactions between connected peers.
 
