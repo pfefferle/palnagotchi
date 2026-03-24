@@ -25,6 +25,7 @@ storage_peer* storageGetPeers();
 uint8_t    storageGetPeerCount();
 uint16_t   storageGetTotalPeers();
 String     storageGetLastFriendName();
+void       storageSetLastFriendName(const String& name);
 signed int storageGetClosestRssi();
 
 // Peer mutations (called by pwngrid/pwnbeacon)
