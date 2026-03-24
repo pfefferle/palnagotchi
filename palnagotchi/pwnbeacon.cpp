@@ -96,9 +96,11 @@ void pwnbeaconAddPeer(const uint8_t *data, size_t len, int8_t rssi,
   String name;
   if (name_len > 0) {
     name = String(adv.name).substring(0, name_len);
-  } else if (ble_name && strlen(ble_name) > 0) {
+  }
+  if (name.length() == 0 && ble_name && strlen(ble_name) > 0) {
     name = String(ble_name);
-  } else {
+  }
+  if (name.length() == 0) {
     name = "BLE peer";
   }
 
@@ -355,7 +357,10 @@ bool pwnbeaconGattRead() {
         JsonDocument doc;
         if (deserializeJson(doc, val.c_str()) == DeserializationError::Ok) {
           peers[target].identity = doc["identity"] | peers[target].identity;
-          peers[target].name     = doc["name"] | peers[target].name;
+          const char* json_name = doc["name"] | "";
+          if (strlen(json_name) > 0) {
+            peers[target].name = json_name;
+          }
           peers[target].face     = doc["face"] | peers[target].face;
           got_data = true;
         }
