@@ -1,12 +1,16 @@
 # Palnagotchi for M5Stack
 
-![Palnagotchi](https://github.com/viniciusbo/m5-palnagotchi/blob/master/palnagotchi.jpg?raw=true)
-
 A friendly unit for those lonely Pwnagotchis out there. It's written to run on the M5Stack, see supported devices below.
 
-I reverse engineered the Pwngrid advertisement protocol and made it possible for several M5Stack devices to advertise to the Pwngrid as a Pwnagotchi. All brain policy parameters that could negatively impact AI learning were removed from the advertisemenet data.
+I reverse engineered the Pwngrid advertisement protocol and made it possible for several M5Stack devices to advertise to the Pwngrid as a Pwnagotchi. All brain policy parameters that could negatively impact AI learning were removed from the advertisement data.
 
 The Pwngrid works by sending Wifi beacon frames with a JSON serialized payload in Wifi AC headers, containing the Pwnagotchi's data (name, face, pwns, brain policy between others). That's how nearby Pwnagotchis can detect and also learn each other. By crafting a custom beacon frame, this app can appear as a Pwnagotchi to other Pwnagotchis.
+
+## PwnBeacon (BLE)
+
+In addition to the WiFi-based Pwngrid protocol, Palnagotchi supports **PwnBeacon** — a compact BLE (Bluetooth Low Energy) protocol for peer discovery. PwnBeacon advertises a binary packet containing the unit's name, fingerprint, and pwn counts via BLE, and scans for other PwnBeacon-enabled devices nearby. This allows Palnagotchis and Palnagotchis to find each other over Bluetooth, complementing the WiFi beacon approach.
+
+PwnBeacon also exposes a GATT service with characteristics for identity, face, name, signal strength, and messages, enabling richer interactions between connected peers.
 
 ## Supported devices
 
