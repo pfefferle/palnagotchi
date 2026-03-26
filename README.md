@@ -1,6 +1,6 @@
 # Palnagotchi for M5Stack
 
-A friendly unit for those lonely Pwnagotchis out there. It's written to run on the M5Stack, see supported devices below.
+A friendly unit for those lonely Pwnagotchis out there `(O_o )`. It's written to run on the M5Stack, see supported devices below.
 
 This is a fork of [m5-palnagotchi](https://github.com/viniciusbo/m5-palnagotchi) by [@viniciusbo](https://github.com/viniciusbo).
 
@@ -29,15 +29,15 @@ PwnBeacon also exposes a GATT service with characteristics for identity, face, n
 
 - Run the app to start advertisement.
 - Button layouts:
-  - Cardputer / Cardputer ADV: ESC or m toggles the menu. Use arrow keys or tab to navigate and OK to select option. Esc or m to go back to main menu.
-  - StickC Plus2: Long press M5 button to toggle menu. Use top and bottom keys to navigate and M5 button (short press) to select option.
-  - AtomS3(R): Long press display to toggle menu. Use double/triple tap display to navigate and short press display to select option.
-  - Dial: Long press M5 button to toggle menu. Use rotary encoder to navigate. Short press M5 button to select.
-  - DinMeter: Long press rotary encoder to toggle menu. Use rotary encoder to navigate. Short press rotary encoder button to select.
-- Top bar shows UPS level and uptime.
-- Bottom bar shows total friends made in this run, all time total friends between parenthesis (needs EEPROM) and signal strengh indicator of closest friend.
-- Nearby pwnagotchis show all nearby units and its signal strength.
-- Palnagotchi gets a random mood every minute or so.
+  - Cardputer / Cardputer ADV: `m` or `` ` `` toggles the menu. Use `.`/`/`/`Tab` for next, `,`/`;` for prev and `Enter` to select.
+  - StickC / StickC Plus / StickC Plus2: Long press M5 button to toggle menu. Power button for next, side button for prev and M5 button (short press) to select.
+  - AtomS3(R) / Core: Long press to toggle menu. Double tap for next, triple tap for prev and short press to select.
+  - Dial: Long press M5 button to toggle menu. Rotary encoder to navigate. Short press M5 button to select.
+  - DinMeter: Long press rotary encoder to toggle menu. Rotary encoder to navigate. Short press to select.
+- Top bar shows battery level and uptime.
+- Bottom bar shows total friends made in this run, all time total friends in parenthesis (needs EEPROM or SD card) and signal strength indicator of closest friend.
+- Nearby pwnagotchis show all nearby units and their signal strength.
+- Palnagotchi gets a random mood every minute or so. Warning: may occasionally identify as a [Pork(chop)](https://github.com/0ct0sec/M5PORKCHOP) and `OINK OINK!` at nearby packets `(^ 00)`.
 
 ## Why?
 
