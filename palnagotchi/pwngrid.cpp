@@ -37,7 +37,7 @@ esp_err_t pwngridAdvertise(uint8_t channel, char session_id[18], String face) {
   pal_json["face"] = face;
   pal_json["epoch"] = 1;
   pal_json["grid_version"] = "1.10.3";
-  pal_json["identity"] = PALNAGOTCHI_IDENTITY;
+  pal_json["identity"] = palnagotchi_identity;
   pal_json["pwnd_run"] = 0;
   pal_json["pwnd_tot"] = 0;
   pal_json["session_id"] = session_id;

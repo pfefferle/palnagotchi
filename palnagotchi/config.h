@@ -1,6 +1,8 @@
 #pragma once
 
 #define PALNAGOTCHI_NAME     "Palnagotchi"
-#define PALNAGOTCHI_IDENTITY "32e9f315e92d974342c93d0fd952a914bfb4e6838953536ea6f63d54db6b9610"
+
+// Derived at boot from BLE MAC, shared across modules
+extern char palnagotchi_identity[65];
 
 #define PEER_AWAY_THRESHOLD_MS 120000
