@@ -7,7 +7,7 @@
 #include <mbedtls/sha256.h>
 
 char pwnbeacon_name[PWNBEACON_ADV_MAX_NAME_LEN + 1] = {0};
-char pwnbeacon_identity[129] = {0};
+char palnagotchi_identity[65] = {0};
 char pwnbeacon_face[64] = "(O__O)";
 uint16_t pwnbeacon_pwnd_run = 0;
 uint16_t pwnbeacon_pwnd_tot = 0;
@@ -36,7 +36,7 @@ String buildIdentityJson() {
   doc["face"]         = pwnbeacon_face;
   doc["epoch"]        = 1;
   doc["grid_version"] = "2.0.0-ble";
-  doc["identity"]     = pwnbeacon_identity;
+  doc["identity"]     = palnagotchi_identity;
   doc["pwnd_run"]     = pwnbeacon_pwnd_run;
   doc["pwnd_tot"]     = pwnbeacon_pwnd_tot;
   doc["session_id"]   = NimBLEDevice::getAddress().toString().c_str();
@@ -182,11 +182,17 @@ void initPwnbeacon() {
     }
   }
   pwnbeacon_name[PWNBEACON_ADV_MAX_NAME_LEN] = '\0';
-  strncpy(pwnbeacon_identity, PALNAGOTCHI_IDENTITY,
-          sizeof(pwnbeacon_identity) - 1);
-  computeFingerprint(pwnbeacon_identity, pwnbeacon_fingerprint);
 
   NimBLEDevice::init(PALNAGOTCHI_NAME);
+
+  // Derive unique identity from BLE MAC address via SHA-256 (must be after init)
+  std::string mac = NimBLEDevice::getAddress().toString();
+  uint8_t hash[32];
+  mbedtls_sha256((const unsigned char *)mac.c_str(), mac.length(), hash, 0);
+  for (int i = 0; i < 32; i++) {
+    snprintf(palnagotchi_identity + i * 2, 3, "%02x", hash[i]);
+  }
+  computeFingerprint(palnagotchi_identity, pwnbeacon_fingerprint);
 
   // GATT server
   ble_server = NimBLEDevice::createServer();
@@ -356,7 +362,8 @@ bool pwnbeaconGattRead() {
       if (val.length() > 0) {
         JsonDocument doc;
         if (deserializeJson(doc, val.c_str()) == DeserializationError::Ok) {
-          peers[target].identity = doc["identity"] | peers[target].identity;
+          // Do NOT overwrite identity — it holds the fingerprint hex
+          // used for deduplication in findPeer()
           const char* json_name = doc["name"] | "";
           if (strlen(json_name) > 0) {
             peers[target].name = json_name;
