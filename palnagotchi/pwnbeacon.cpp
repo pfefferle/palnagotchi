@@ -258,9 +258,9 @@ esp_err_t pwnbeaconAdvertise(String face) {
   buildAdvPayload(adv_payload, &adv_payload_len);
 
   // BLE scan response: 31 bytes max, 128-bit UUID takes 18 bytes overhead,
-  // leaving ~13 for data. Clamp to 10 for safety.
-  if (adv_payload_len > 10) {
-    adv_payload_len = 10;
+  // leaving 13 for data.
+  if (adv_payload_len > 13) {
+    adv_payload_len = 13;
   }
 
   NimBLEAdvertisementData advData;
